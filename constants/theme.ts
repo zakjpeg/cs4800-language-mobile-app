@@ -5,27 +5,39 @@
 
 import { Platform } from 'react-native';
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+const tintColorLight = '#84CC16';
+const tintColorDark  = '#A3E635';
 
 export const Colors = {
   light: {
-    text: '#11181C',
-    background: '#fff',
-    tint: tintColorLight,
-    icon: '#687076',
-    tabIconDefault: '#687076',
+    text:            '#111827',  // Midnight
+    background:     '#F9FFF0',  // Lime-tinted white
+    tint:            tintColorLight,
+    icon:            '#253260',  // Indigo dusk
+    tabIconDefault: '#4B5E8A',  // Muted blue
     tabIconSelected: tintColorLight,
+    surface:         '#FFFFFF',
+    surfaceAlt:      '#F0FBD8',  // Lime mist card
+    border:          '#D9F99D',  // Lime light
+    primary:         '#1A2540',  // Navy deep
+    accent:          '#84CC16',
   },
   dark: {
-    text: '#ECEDEE',
-    background: '#151718',
-    tint: tintColorDark,
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
+    text:            '#E2F5B8',  // Lime-tinted white
+    background:     '#0B0F1A',  // Abyss
+    tint:            tintColorDark,
+    icon:            '#84CC16',  // Lime
+    tabIconDefault: '#4B5563',  // Muted gray-blue
     tabIconSelected: tintColorDark,
+    surface:         '#111827',  // Midnight
+    surfaceAlt:      '#1A2540',  // Navy deep card
+    border:          '#253260',  // Indigo dusk
+    primary:         '#A3E635',  // Lime bright
+    accent:          '#A3E635',
   },
 };
+
+
 
 export const Fonts = Platform.select({
   ios: {
