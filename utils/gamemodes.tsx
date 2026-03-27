@@ -172,7 +172,6 @@ export function GamemodeModal({ gamemode }: { gamemode: Gamemode }) {
       paddingHorizontal: 20,
       backgroundColor: useColors().background,
       zIndex: 1,
-      boxShadow: "box-shadow: 5px 5px 10px 2px rgba(0, 0, 0, 0.5)",
     },
     title: {
       fontFamily: "Artz",
