@@ -1,15 +1,20 @@
 import { Gamemodes } from "@/utils/gamemodes";
-import { levelData } from "@/utils/questions";
+import { LanguageData } from "@/utils/languages";
 import { useColors } from "@/utils/theme";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Animated,
   Dimensions,
   Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -18,18 +23,14 @@ const { width, height } = Dimensions.get("window");
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-interface Choice {
+interface ChatMessage {
   id: string;
+  role: "user" | "assistant";
   text: string;
-  isCorrect: boolean;
+  points?: number;
 }
+//a
 
-interface Question {
-  npcSpeech: string;
-  choices: Choice[];
-}
-
-type AnswerState = "unanswered" | "correct" | "incorrect";
 type Mood = "happy" | "confused" | "angry";
 
 // ── Mood helpers ──────────────────────────────────────────────────────────────
@@ -46,83 +47,68 @@ function stepMoodDown(current: Mood): Mood {
   return MOOD_LADDER[Math.max(i - 1, 0)];
 }
 
-// ── Question Bank ─────────────────────────────────────────────────────────────
+// ── API Call ──────────────────────────────────────────────────────────────────
 
-const QUESTIONS: Question[] = [
-  {
-    npcSpeech: "Salut! Comment réponds-tu à cette salutation en français?",
-    choices: [
-      { id: "a", text: "Bonjour, comment ça va?", isCorrect: true },
-      { id: "b", text: "Gracias, mucho gusto.", isCorrect: false },
-      { id: "c", text: "Ciao, come stai?", isCorrect: false },
-    ],
-  },
-  {
-    npcSpeech: "Comment dit-on 'Thank you' en français?",
-    choices: [
-      { id: "a", text: "S'il vous plaît", isCorrect: false },
-      { id: "b", text: "Merci", isCorrect: true },
-      { id: "c", text: "Pardon", isCorrect: false },
-    ],
-  },
-  {
-    npcSpeech: "Quelle est la traduction de 'I am hungry'?",
-    choices: [
-      { id: "a", text: "J'ai soif", isCorrect: false },
-      { id: "b", text: "Je suis fatiqué", isCorrect: false },
-      { id: "c", text: "J'ai faim", isCorrect: true },
-    ],
-  },
-  {
-    npcSpeech: "Comment dit-on 'Good night' en français?",
-    choices: [
-      { id: "a", text: "Bonne nuit", isCorrect: true },
-      { id: "b", text: "Bon matin", isCorrect: false },
-      { id: "c", text: "Bonne chance", isCorrect: false },
-    ],
-  },
-  {
-    npcSpeech: "Qu'est-ce que signifie 'bibliothèque'?",
-    choices: [
-      { id: "a", text: "Bookstore", isCorrect: false },
-      { id: "b", text: "Pharmacy", isCorrect: false },
-      { id: "c", text: "Library", isCorrect: true },
-    ],
-  },
-];
+async function getChatResponse(
+  userMessage: string,
+  language: string,
+  gamemodeTopic: string,
+  conversationHistory: ChatMessage[]
+): Promise<string> {
+  const languageData = LanguageData[language as keyof typeof LanguageData];
+  if (!languageData) throw new Error("Invalid language");
 
-// ── Subcomponents ─────────────────────────────────────────────────────────────
+  // Try to get API key from environment
+  const apiKey = (process.env.EXPO_PUBLIC_GROQ_API_KEY ||
+    process.env.GROQ_API_KEY ||
+    process.env.API_KEY) as string;
 
-function ProgressBar({
-  current,
-  total,
-  styles,
-}: {
-  current: number;
-  total: number;
-  styles: ReturnType<typeof StyleSheet.create>;
-}) {
-  const progress = useRef(new Animated.Value(0)).current;
+  if (!apiKey || apiKey === "your_api_key_here") {
+    throw new Error(
+      "API key not configured. Please set EXPO_PUBLIC_GROQ_API_KEY in .env.local and restart the dev server."
+    );
+  }
 
-  useEffect(() => {
-    Animated.timing(progress, {
-      toValue: current / total,
-      duration: 600,
-      useNativeDriver: false,
-    }).start();
-  }, [current]);
+  const systemPrompt = `You are a friendly NPC having a casual conversation in ${language}.
+Respond ONLY in ${language}, no English whatsoever.
+Keep responses brief (1-2 sentences).
+The conversation topic is: ${gamemodeTopic}.
+Be natural and engaging, like you're chatting with someone.`;
 
-  const barWidth = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0%", "100%"],
+  const messages = [
+    { role: "system", content: systemPrompt },
+    ...conversationHistory
+      .filter((m) => m.role === "user" || m.role === "assistant")
+      .map((m) => ({
+        role: m.role,
+        content: m.text,
+      })),
+    { role: "user", content: userMessage },
+  ];
+
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: "llama-3.3-70b-versatile",
+      max_tokens: 150,
+      messages,
+    }),
   });
 
-  return (
-    <View style={styles.progressTrack}>
-      <Animated.View style={[styles.progressFill, { width: barWidth }]} />
-    </View>
-  );
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error?.message || "API request failed");
+  }
+
+  const data = await response.json();
+  return data.choices[0].message.content;
 }
+
+// ── Subcomponents ─────────────────────────────────────────────────────────────
 
 function NPCBubble({
   name,
@@ -138,7 +124,6 @@ function NPCBubble({
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(-10)).current;
 
-  // Re-animate speech bubble when speech changes
   useEffect(() => {
     fadeAnim.setValue(0);
     slideAnim.setValue(-10);
@@ -155,9 +140,8 @@ function NPCBubble({
         useNativeDriver: true,
       }),
     ]).start();
-  }, [speech]);
+  }, [speech, fadeAnim, slideAnim]);
 
-  // Bounce the avatar whenever the mood (avatarUri) changes
   const avatarScaleAnim = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     Animated.sequence([
@@ -173,7 +157,7 @@ function NPCBubble({
         useNativeDriver: true,
       }),
     ]).start();
-  }, [avatarUri]);
+  }, [avatarUri, avatarScaleAnim]);
 
   return (
     <View style={styles.npcRow}>
@@ -208,31 +192,25 @@ function NPCBubble({
   );
 }
 
-function ChoiceCard({
-  choice,
-  index,
-  onPress,
-  selectedId,
-  answerState,
+function ChatBubble({
+  message,
+  isUser,
   styles,
+  points,
 }: {
-  choice: Choice;
-  index: number;
-  onPress: (choice: Choice) => void;
-  selectedId: string | null;
-  answerState: AnswerState;
+  message: string;
+  isUser: boolean;
   styles: ReturnType<typeof StyleSheet.create>;
+  points?: number;
 }) {
-  const scaleAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(30)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
 
   useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 350,
-        delay: index * 80,
+        duration: 300,
         useNativeDriver: true,
       }),
       Animated.spring(slideAnim, {
@@ -242,141 +220,34 @@ function ChoiceCard({
         useNativeDriver: true,
       }),
     ]).start();
-  }, []);
-
-  const handlePress = () => {
-    Animated.sequence([
-      Animated.timing(scaleAnim, {
-        toValue: 0.96,
-        duration: 80,
-        useNativeDriver: true,
-      }),
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        tension: 200,
-        friction: 10,
-        useNativeDriver: true,
-      }),
-    ]).start();
-    onPress(choice);
-  };
-
-  const isSelected = selectedId === choice.id;
-  const isAnswered = answerState !== "unanswered";
-  const showAsCorrect = isAnswered && choice.isCorrect;
-  const showAsWrong = isAnswered && isSelected && !choice.isCorrect;
-  const isDimmed = isAnswered && !isSelected && !choice.isCorrect;
-
-  const cardBg = showAsCorrect
-    ? CORRECT_COLOR
-    : showAsWrong
-      ? WRONG_COLOR
-      : isSelected
-        ? ACCENT
-        : CARD_BG;
-
-  const labels = ["A", "B", "C"];
+  }, [fadeAnim, slideAnim]);
 
   return (
     <Animated.View
       style={[
-        styles.choiceCardWrapper,
-        {
-          opacity: isDimmed
-            ? fadeAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0, 0.35],
-              })
-            : fadeAnim,
-          transform: [{ scale: scaleAnim }, { translateY: slideAnim }],
-        },
+        isUser ? styles.userBubbleContainer : styles.aiBubbleContainer,
+        { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
       ]}
     >
-      <TouchableOpacity
-        activeOpacity={0.85}
-        onPress={handlePress}
-        disabled={isAnswered}
-        style={[styles.choiceCard, { backgroundColor: cardBg }]}
-      >
-        <View
-          style={[
-            styles.choiceLabel,
-            (isSelected || showAsCorrect) && styles.choiceLabelSelected,
-          ]}
-        >
-          <Text
-            style={[
-              styles.choiceLabelText,
-              (isSelected || showAsCorrect) && styles.choiceLabelTextSelected,
-            ]}
-          >
-            {showAsCorrect ? "✓" : showAsWrong ? "✗" : labels[index]}
-          </Text>
-        </View>
-        <Text
-          style={[
-            styles.choiceText,
-            (isSelected || showAsCorrect) && styles.choiceTextSelected,
-          ]}
-        >
-          {choice.text}
+      <View style={isUser ? styles.userBubble : styles.aiBubble}>
+        <Text style={isUser ? styles.userBubbleText : styles.aiBubbleText}>
+          {message}
         </Text>
-      </TouchableOpacity>
+        {points && (
+          <Text style={styles.pointsBadge}>+{points} pts</Text>
+        )}
+      </View>
     </Animated.View>
   );
 }
 
-function FeedbackBanner({
-  answerState,
-  styles,
-}: {
-  answerState: AnswerState;
-  styles: ReturnType<typeof StyleSheet.create>;
-}) {
-  const slideAnim = useRef(new Animated.Value(60)).current;
-
-  useEffect(() => {
-    if (answerState === "unanswered") {
-      slideAnim.setValue(60);
-      return;
-    }
-    Animated.spring(slideAnim, {
-      toValue: 0,
-      tension: 120,
-      friction: 12,
-      useNativeDriver: true,
-    }).start();
-  }, [answerState]);
-
-  if (answerState === "unanswered") return null;
-
-  const isCorrect = answerState === "correct";
-
-  return (
-    <Animated.View
-      style={[
-        styles.feedbackBanner,
-        { backgroundColor: isCorrect ? CORRECT_COLOR : WRONG_COLOR },
-        { transform: [{ translateY: slideAnim }] },
-      ]}
-    >
-      <Text style={styles.feedbackEmoji}>{isCorrect ? "🎉" : "❌"}</Text>
-      <Text style={styles.feedbackText}>
-        {isCorrect ? "Correct! Well done." : "Not quite — keep going!"}
-      </Text>
-    </Animated.View>
-  );
-}
-
-function SummaryScreen({
-  score,
-  total,
+function WinScreen({
+  totalScore,
   onRetry,
   onHome,
   styles,
 }: {
-  score: number;
-  total: number;
+  totalScore: number;
   onRetry: () => void;
   onHome: () => void;
   styles: ReturnType<typeof StyleSheet.create>;
@@ -398,34 +269,21 @@ function SummaryScreen({
         useNativeDriver: true,
       }),
     ]).start();
-  }, []);
-
-  const pct = Math.round((score / total) * 100);
-  const emoji = pct === 100 ? "🏆" : pct >= 70 ? "⭐" : pct >= 40 ? "👍" : "📚";
-  const message =
-    pct === 100
-      ? "Perfect score!"
-      : pct >= 70
-        ? "Great job!"
-        : pct >= 40
-          ? "Good effort!"
-          : "Keep practicing!";
+  }, [scaleAnim, fadeAnim]);
 
   return (
     <Animated.View
       style={[
-        styles.summaryContainer,
+        styles.winContainer,
         { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
       ]}
     >
-      <Text style={styles.summaryEmoji}>{emoji}</Text>
-      <Text style={styles.summaryTitle}>{message}</Text>
-      <Text style={styles.summaryScore}>
-        {score} / {total}
-      </Text>
-      <Text style={styles.summaryPct}>{pct}% correct</Text>
+      <Text style={styles.winEmoji}>🎉</Text>
+      <Text style={styles.winTitle}>You Win!</Text>
+      <Text style={styles.winScore}>{totalScore} Points</Text>
+      <Text style={styles.winSubtitle}>Great job practicing!</Text>
 
-      <View style={styles.summaryButtons}>
+      <View style={styles.winButtons}>
         <TouchableOpacity style={styles.playButton} onPress={onRetry}>
           <Text style={styles.playButtonText}>Play Again</Text>
         </TouchableOpacity>
@@ -452,71 +310,123 @@ function showLeaveAlert() {
 
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
-const AUTO_ADVANCE_DELAY = 1500;
+const TARGET_SCORE = 15;
 
 export default function GameplayScreen() {
   const { gamemodeKey, language } = useLocalSearchParams();
   const gamemode = Gamemodes[gamemodeKey as string];
 
-  const [npcName] = useState<string>(gamemode.npcName);
-  const [questions, setQuestions] = useState(levelData[gamemodeKey][language]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [inputText, setInputText] = useState("");
+  const [totalScore, setTotalScore] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
   const [mood, setMood] = useState<Mood>("happy");
-  const [questionIndex, setQuestionIndex] = useState(0);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [answerState, setAnswerState] = useState<AnswerState>("unanswered");
-  const [score, setScore] = useState(0);
-  const [isGameOver, setIsGameOver] = useState(false);
+  const [hasWon, setHasWon] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
+  const scrollViewRef = useRef<ScrollView>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const totalQuestions = questions.length;
-  const currentQuestion = questions[questionIndex];
+  const topicString = gamemode?.topics?.join(", ") || "general conversation";
 
-  useEffect(
-    () => () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    },
-    [],
-  );
+  const handleLeaveGame = useCallback(() => {
+    router.replace("/");
+  }, []);
 
-  const advanceQuestion = useCallback(() => {
-    const nextIndex = questionIndex + 1;
-    if (nextIndex >= totalQuestions) {
-      setIsGameOver(true);
-    } else {
-      setQuestionIndex(nextIndex);
-      setSelectedId(null);
-      setAnswerState("unanswered");
-    }
-  }, [questionIndex, totalQuestions]);
-
-  const handleChoice = useCallback(
-    (choice: Choice) => {
-      if (answerState !== "unanswered") return;
-
-      setSelectedId(choice.id);
-
-      if (choice.isCorrect) {
-        setScore((s) => s + 1);
-        setMood((m) => stepMoodUp(m));
-        setAnswerState("correct");
-      } else {
-        setMood((m) => stepMoodDown(m));
-        setAnswerState("incorrect");
+  // Initial greeting from NPC
+  useEffect(() => {
+    const sendInitialGreeting = async () => {
+      try {
+        const greeting = `Hola! Como estás?`; // Will be replaced with actual greeting
+        const initialMsg: ChatMessage = {
+          id: "0",
+          role: "assistant",
+          text: greeting,
+        };
+        setMessages([initialMsg]);
+      } catch (err) {
+        setErrorMsg("Failed to initialize conversation");
       }
+    };
 
-      timerRef.current = setTimeout(advanceQuestion, AUTO_ADVANCE_DELAY);
-    },
-    [answerState, advanceQuestion],
-  );
+    sendInitialGreeting();
+
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  const handleSendMessage = useCallback(async () => {
+    if (!inputText.trim() || isLoading) return;
+
+    const userMsg: ChatMessage = {
+      id: Date.now().toString(),
+      role: "user",
+      text: inputText.trim(),
+    };
+
+    setMessages((prev) => [...prev, userMsg]);
+    setInputText("");
+    setIsLoading(true);
+    setErrorMsg("");
+
+    try {
+      const response = await getChatResponse(
+        userMsg.text,
+        language as string,
+        topicString,
+        messages
+      );
+      
+////////
+      //
+      //
+      //TO BE REPLACE WITH ACTUAL SCORING LOGIC BASED ON RESPONSE QUALITY
+      //
+      //
+////////
+      const points = Math.floor(Math.random() * 5) + 1;
+      const newScore = totalScore + points;
+
+      const aiMsg: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        text: response,
+        points,
+      };
+
+      setMessages((prev) => [...prev, aiMsg]);
+      setTotalScore(newScore);
+
+      if (newScore >= TARGET_SCORE) {
+        setHasWon(true);
+      } else {
+        setMood((m) => stepMoodUp(m));
+      }
+    } catch (err) {
+      console.error("Chat error:", err);
+      const errorMsg =
+        err instanceof Error ? err.message : "Failed to get response";
+      setErrorMsg(errorMsg);
+      setMood((m) => stepMoodDown(m));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [inputText, isLoading, totalScore, messages, language, topicString]);
 
   const handleRetry = () => {
-    setQuestionIndex(0);
-    setSelectedId(null);
-    setAnswerState("unanswered");
-    setScore(0);
+    setMessages([
+      {
+        id: "0",
+        role: "assistant",
+        text: `Hola! Como estás?`,
+      },
+    ]);
+    setInputText("");
+    setTotalScore(0);
     setMood("happy");
-    setIsGameOver(false);
+    setHasWon(false);
+    setErrorMsg("");
   };
 
   const handleHome = () => {
@@ -530,63 +440,75 @@ export default function GameplayScreen() {
     safe: { flex: 1, backgroundColor: colors.surface },
     container: {
       flex: 1,
-      paddingHorizontal: 24,
+      paddingHorizontal: 16,
       paddingTop: 12,
-      paddingBottom: 24,
+      paddingBottom: 16,
     },
 
     // ── Header
-    header: { marginBottom: 8 },
-    questionCounter: {
+    header: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 12,
+      paddingHorizontal: 8,
+    },
+    title: {
       fontFamily: "Artz",
-      fontSize: 28,
+      fontSize: 24,
       fontWeight: "700",
       color: colors.text,
-      marginBottom: 10,
     },
-    questionCounterMuted: {
-      color: colors.text,
-      fontWeight: "400",
-      fontSize: 22,
-    },
-    progressTrack: {
-      height: 4,
-      backgroundColor: colors.surfaceAlt,
-      borderRadius: 2,
-      overflow: "hidden",
-    },
-    progressFill: {
-      height: 4,
+    scoreDisplay: {
       backgroundColor: colors.accent,
-      borderRadius: 2,
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 20,
+      minWidth: 100,
+    },
+    scoreText: {
+      color: "#fff",
+      fontSize: 16,
+      fontWeight: "700",
+      textAlign: "center",
+    },
+    scoreLabel: {
+      color: "#fff",
+      fontSize: 11,
+      textAlign: "center",
+      marginTop: 2,
     },
 
     // ── NPC Area
-    npcArea: { flex: 3, justifyContent: "center", paddingTop: 8 },
+    npcContainer: {
+      paddingHorizontal: 8,
+      marginBottom: 16,
+      marginTop: 8,
+    },
     npcRow: { flexDirection: "row", alignItems: "flex-start", gap: 14 },
     avatarWrapper: { alignItems: "center", gap: 6, paddingTop: 4 },
     avatarRing: {
-      width: 62,
-      height: 62,
-      borderRadius: 31,
+      width: 56,
+      height: 56,
+      borderRadius: 28,
       borderWidth: 2.5,
       borderColor: colors.accent,
       padding: 2,
       overflow: "hidden",
     },
-    avatarImage: { width: "100%", height: "100%", borderRadius: 28 },
+    avatarImage: { width: "100%", height: "100%", borderRadius: 26 },
     avatarFallback: {
       flex: 1,
       backgroundColor: colors.accent,
-      borderRadius: 28,
+      borderRadius: 26,
       alignItems: "center",
       justifyContent: "center",
     },
-    avatarInitial: { color: "#fff", fontSize: 24, fontWeight: "700" },
+    avatarInitial: { color: "#fff", fontSize: 20, fontWeight: "700" },
     npcName: {
       color: colors.primary,
-      fontSize: 11,
-      letterSpacing: 1,
+      fontSize: 10,
+      letterSpacing: 0.5,
       textTransform: "uppercase",
       fontWeight: "600",
       fontFamily: "Artz",
@@ -594,20 +516,19 @@ export default function GameplayScreen() {
     speechBubble: {
       flex: 1,
       backgroundColor: "white",
-      borderRadius: 18,
+      borderRadius: 16,
       borderTopLeftRadius: 4,
-      padding: 18,
+      padding: 14,
       shadowColor: "#000",
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.25,
-      shadowRadius: 12,
-      elevation: 6,
-      position: "relative",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.15,
+      shadowRadius: 8,
+      elevation: 4,
     },
     bubbleTail: {
       position: "absolute",
-      left: -9,
-      top: 14,
+      left: -8,
+      top: 12,
       width: 0,
       height: 0,
       borderTopWidth: 8,
@@ -618,130 +539,168 @@ export default function GameplayScreen() {
       borderRightColor: "white",
     },
     speechText: {
-      fontSize: 17,
-      lineHeight: 26,
+      fontSize: 15,
+      lineHeight: 22,
       color: "#1A1A2E",
-      fontStyle: "italic",
     },
 
-    // ── Divider
-    dividerRow: {
+    // ── Chat Messages
+    messagesContainer: {
+      flex: 1,
+      gap: 8,
+      paddingHorizontal: 8,
+      marginBottom: 12,
+    },
+    userBubbleContainer: {
       flexDirection: "row",
-      alignItems: "center",
-      gap: 12,
-      marginVertical: 20,
+      justifyContent: "flex-end",
+      paddingHorizontal: 8,
+      marginVertical: 4,
     },
-    dividerLine: { flex: 1, height: 1, backgroundColor: "#2E2E48" },
-    dividerLabel: {
-      color: "#6b6b8a",
-      fontSize: 11,
-      letterSpacing: 1.5,
-      textTransform: "uppercase",
-      fontWeight: "600",
+    aiBubbleContainer: {
+      flexDirection: "row",
+      justifyContent: "flex-start",
+      paddingHorizontal: 8,
+      marginVertical: 4,
     },
-
-    // ── Choices
-    choicesArea: { flex: 5, justifyContent: "center", gap: 12 },
-    choiceCardWrapper: { borderRadius: 16 },
-    choiceCard: {
+    userBubble: {
+      backgroundColor: colors.accent,
       borderRadius: 16,
-      paddingVertical: 18,
-      paddingHorizontal: 20,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 16,
+      borderBottomRightRadius: 4,
+      paddingVertical: 10,
+      paddingHorizontal: 14,
+      maxWidth: "75%",
     },
-    choiceLabel: {
-      width: 34,
-      height: 34,
-      borderRadius: 10,
-      backgroundColor: colors.text,
+    aiBubble: {
+      backgroundColor: CARD_BG,
+      borderRadius: 16,
+      borderBottomLeftRadius: 4,
+      paddingVertical: 10,
+      paddingHorizontal: 14,
+      maxWidth: "75%",
+    },
+    userBubbleText: {
+      color: "#fff",
+      fontSize: 15,
+      lineHeight: 20,
+      fontWeight: "500",
+    },
+    aiBubbleText: {
+      color: SAND,
+      fontSize: 15,
+      lineHeight: 20,
+    },
+    pointsBadge: {
+      color: "#FFD700",
+      fontSize: 12,
+      fontWeight: "700",
+      marginTop: 4,
+    },
+
+    // ── Error
+    errorBanner: {
+      backgroundColor: WRONG_COLOR,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 8,
+      marginHorizontal: 8,
+      marginBottom: 8,
+    },
+    errorText: {
+      color: "#fff",
+      fontSize: 13,
+      fontWeight: "500",
+    },
+
+    // ── Input Area
+    inputContainer: {
+      flexDirection: "row",
+      gap: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 8,
+      backgroundColor: colors.surfaceAlt,
+      borderRadius: 12,
+    },
+    input: {
+      flex: 1,
+      backgroundColor: colors.surface,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      fontSize: 15,
+      color: colors.text,
+      borderWidth: 1,
+      borderColor: MUTED,
+    },
+    sendButton: {
+      width: 42,
+      height: 42,
+      borderRadius: 8,
+      backgroundColor: colors.accent,
       alignItems: "center",
       justifyContent: "center",
     },
-    choiceLabelSelected: { backgroundColor: colors.text },
-    choiceLabelText: {
-      color: MUTED,
-      fontSize: 13,
-      fontWeight: "700",
-      letterSpacing: 0.5,
+    sendButtonText: {
+      fontSize: 18,
+      color: "#fff",
     },
-    choiceLabelTextSelected: { color: colors.background },
-    choiceText: { flex: 1, color: SAND, fontSize: 16, lineHeight: 22 },
-    choiceTextSelected: { color: "#fff", fontWeight: "600" },
 
-    // ── Feedback Banner
-    feedbackBanner: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 10,
-      paddingVertical: 14,
-      paddingHorizontal: 20,
-      borderRadius: 14,
-      marginTop: 16,
-    },
-    feedbackEmoji: { fontSize: 22 },
-    feedbackText: { color: "#fff", fontSize: 15, fontWeight: "600", flex: 1 },
-
-    // ── Summary
-    summaryContainer: {
+    // ── Win Screen
+    winContainer: {
       flex: 1,
       alignItems: "center",
       justifyContent: "center",
       paddingHorizontal: 32,
       gap: 12,
     },
-    summaryEmoji: { fontSize: 72, marginBottom: 8 },
-    summaryTitle: {
+    winEmoji: { fontSize: 72, marginBottom: 8 },
+    winTitle: {
       fontFamily: "Artz",
-      fontSize: 30,
+      fontSize: 36,
       fontWeight: "700",
       color: colors.text,
-      textAlign: "center",
     },
-    summaryScore: {
+    winScore: {
       fontSize: 48,
       fontWeight: "800",
       color: colors.accent,
       letterSpacing: 2,
     },
-    summaryPct: { fontSize: 16, color: MUTED, letterSpacing: 1 },
-    summaryButtons: {
+    winSubtitle: {
+      fontSize: 16,
+      color: MUTED,
+      marginBottom: 12,
+    },
+    winButtons: {
       flexDirection: "column",
       gap: 8,
       marginTop: 24,
       width: "100%",
     },
-    summaryBtn: {
-      paddingVertical: 16,
-      borderRadius: 16,
-      alignItems: "center",
-    },
-    summaryBtnPrimary: { backgroundColor: colors.accent },
-    summaryBtnSecondary: {
-      backgroundColor: "transparent",
-      borderWidth: 1.5,
-      borderColor: MUTED,
-    },
-    summaryBtnTextPrimary: { color: "#fff", fontSize: 17, fontWeight: "700" },
-    summaryBtnTextSecondary: { color: MUTED, fontSize: 17, fontWeight: "600" },
     playButton: {
       borderRadius: 500,
-      color: useColors().text,
-      backgroundColor: useColors().tint,
+      backgroundColor: colors.tint,
       paddingVertical: 12,
-      marginVertical: 20,
-    },
-    playButtonText: {
-      fontFamily: "Artz",
-      fontSize: 28,
-      textAlign: "center",
     },
     backButton: {
       borderRadius: 500,
-      color: useColors().text,
       backgroundColor: "#f3f3e3",
       paddingVertical: 12,
+    },
+    playButtonText: {
+      fontFamily: "Artz",
+      fontSize: 24,
+      textAlign: "center",
+      color: colors.text,
+    },
+    leaveButton: {
+      paddingVertical: 8,
+      marginTop: 12,
+    },
+    leaveButtonText: {
+      color: MUTED,
+      textAlign: "center",
+      fontSize: 14,
     },
   });
 
@@ -749,79 +708,107 @@ export default function GameplayScreen() {
     <>
       <Stack.Screen options={{ title: gamemode?.title ?? "Game" }} />
       <View style={styles.safe}>
-        <View style={styles.container}>
-          {isGameOver ? (
-            <SummaryScreen
-              score={score}
-              total={totalQuestions}
+        {hasWon ? (
+          <View style={styles.container}>
+            <WinScreen
+              totalScore={totalScore}
               onRetry={handleRetry}
               onHome={handleHome}
               styles={styles}
             />
-          ) : (
-            <>
-              {/* Header */}
-              <View style={styles.header}>
-                <Text style={styles.questionCounter}>
-                  {questionIndex + 1}{" "}
-                  <Text style={styles.questionCounterMuted}>
-                    / {totalQuestions}
-                  </Text>
-                </Text>
-                <ProgressBar
-                  current={questionIndex + 1}
-                  total={totalQuestions}
-                  styles={styles}
-                />
+          </View>
+        ) : (
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={styles.container}
+          >
+            {/* Header with Score */}
+            <View style={styles.header}>
+              <Text style={styles.title}>{gamemode?.title}</Text>
+              <View style={styles.scoreDisplay}>
+                <Text style={styles.scoreText}>{totalScore}/15</Text>
+                <Text style={styles.scoreLabel}>points</Text>
               </View>
+            </View>
 
-              {/* NPC */}
-              <View style={styles.npcArea}>
+            {/* NPC Greeting */}
+            {messages.length > 0 && messages[0].role === "assistant" && (
+              <View style={styles.npcContainer}>
                 <NPCBubble
-                  name={npcName}
-                  avatarUri={gamemode.avatars[mood]}
-                  speech={currentQuestion.npcSpeech}
+                  name={gamemode?.npcName || "NPC"}
+                  avatarUri={gamemode?.avatars?.[mood]}
+                  speech={messages[0].text}
                   styles={styles}
                 />
               </View>
+            )}
 
-              {/* Divider */}
-              <View style={styles.dividerRow}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerLabel}>Your response</Text>
-                <View style={styles.dividerLine} />
+            {/* Chat Messages */}
+            <ScrollView
+              ref={scrollViewRef}
+              style={styles.messagesContainer}
+              onContentSizeChange={() =>
+                scrollViewRef.current?.scrollToEnd({ animated: true })
+              }
+            >
+              {messages.slice(1).map((msg) => (
+                <ChatBubble
+                  key={msg.id}
+                  message={msg.text}
+                  isUser={msg.role === "user"}
+                  points={msg.points}
+                  styles={styles}
+                />
+              ))}
+              {isLoading && (
+                <View style={styles.aiBubbleContainer}>
+                  <View style={styles.aiBubble}>
+                    <ActivityIndicator color={SAND} size="small" />
+                  </View>
+                </View>
+              )}
+            </ScrollView>
+
+            {/* Error Message */}
+            {errorMsg && (
+              <View style={styles.errorBanner}>
+                <Text style={styles.errorText}>{errorMsg}</Text>
               </View>
+            )}
 
-              {/* Choices */}
-              <View style={styles.choicesArea}>
-                {currentQuestion.choices.map((choice, i) => (
-                  <ChoiceCard
-                    key={`${questionIndex}-${choice.id}`}
-                    choice={choice}
-                    index={i}
-                    onPress={handleChoice}
-                    selectedId={selectedId}
-                    answerState={answerState}
-                    styles={styles}
-                  />
-                ))}
+            {/* Input Area */}
+            <View style={styles.inputContainer}>
+              <TextInput
+                style={styles.input}
+                placeholder="Type your response..."
+                placeholderTextColor={MUTED}
+                value={inputText}
+                onChangeText={setInputText}
+                editable={!isLoading}
+                multiline
+                maxLength={200}
+              />
+              <TouchableOpacity
+                style={styles.sendButton}
+                onPress={handleSendMessage}
+                disabled={!inputText.trim() || isLoading}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.sendButtonText}>
+                  {isLoading ? "..." : "→"}
+                </Text>
+              </TouchableOpacity>
+            </View>
 
-                <FeedbackBanner answerState={answerState} styles={styles} />
-              </View>
-
-              {/* Leave */}
-              <View>
-                <TouchableOpacity onPress={showLeaveAlert}>
-                  <Text
-                    style={{ color: MUTED, textAlign: "center", marginTop: 8 }}
-                  >
-                    Leave
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </>
-          )}
-        </View>
+            {/* Leave Button */}
+            <TouchableOpacity
+              style={styles.leaveButton}
+              onPress={handleLeaveGame}
+            >
+              <Text style={styles.leaveButtonText}>Leave Game</Text>
+            </TouchableOpacity>
+          </KeyboardAvoidingView>
+        )}
       </View>
     </>
   );
@@ -830,8 +817,6 @@ export default function GameplayScreen() {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const SAND = "#F5ECD7";
-const ACCENT = "#E8632A";
 const CARD_BG = "#242438";
 const MUTED = "#6B6B8A";
-const CORRECT_COLOR = "#2E7D32";
 const WRONG_COLOR = "#C62828";
