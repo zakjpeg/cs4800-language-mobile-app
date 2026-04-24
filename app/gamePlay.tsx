@@ -29,6 +29,7 @@ interface ChatMessage {
   text: string;
   points?: number;
 }
+//a
 
 type Mood = "happy" | "confused" | "angry";
 
