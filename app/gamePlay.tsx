@@ -72,7 +72,7 @@ async function getChatResponse(
   const systemPrompt = `You are a friendly NPC having a casual conversation in ${language}.
 Respond ONLY in ${language}, no English whatsoever.
 Keep responses brief (1-2 sentences).
-The conversation topic is: ${gamemodeTopic}.
+You must act as you are this role: ${gamemodeTopic}.
 Be natural and engaging, like you're chatting with someone.`;
 
   const messages = [
@@ -95,6 +95,56 @@ Be natural and engaging, like you're chatting with someone.`;
     body: JSON.stringify({
       model: "llama-3.3-70b-versatile",
       max_tokens: 150,
+      messages,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error?.message || "API request failed");
+  }
+
+  const data = await response.json();
+  return data.choices[0].message.content;
+}
+
+// ── Initial Greeting API Call ─────────────────────────────────────────────────
+
+async function getInitialGreeting(language: string, gamemodeTopic: string): Promise<string> {
+  const languageData = LanguageData[language as keyof typeof LanguageData];
+  if (!languageData) throw new Error("Invalid language");
+
+  // Try to get API key from environment
+  const apiKey = (process.env.EXPO_PUBLIC_GROQ_API_KEY ||
+    process.env.GROQ_API_KEY ||
+    process.env.API_KEY) as string;
+
+  if (!apiKey || apiKey === "your_api_key_here") {
+    throw new Error(
+      "API key not configured. Please set EXPO_PUBLIC_GROQ_API_KEY in .env.local and restart the dev server."
+    );
+  }
+
+  const systemPrompt = `You are a friendly NPC starting a conversation in ${language}.
+Respond ONLY in ${language}, no English whatsoever.
+Provide a brief greeting (1 sentence) to start the conversation.
+You must act as you are this role: ${gamemodeTopic}.
+Be natural and engaging, like you're chatting with someone.`;
+
+  const messages = [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: "Hello" },
+  ];
+
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: "llama-3.3-70b-versatile",
+      max_tokens: 50,  // shorter for greeting
       messages,
     }),
   });
@@ -337,7 +387,7 @@ export default function GameplayScreen() {
   useEffect(() => {
     const sendInitialGreeting = async () => {
       try {
-        const greeting = `Hola! Como estás?`; // Will be replaced with actual greeting
+        const greeting = await getInitialGreeting(language as string, topicString);
         const initialMsg: ChatMessage = {
           id: "0",
           role: "assistant",
