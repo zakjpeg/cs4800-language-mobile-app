@@ -13,14 +13,15 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { GamemodeItem, Gamemodes } from "@/utils/gamemodes";
 import { Images } from "@/utils/images";
-import { Language, LanguageData } from "@/utils/languages";
+import { useLanguage } from "@/utils/LanguageContext";
+import { LanguageData } from "@/utils/languages";
+import { useProfile } from "@/utils/ProfileContext";
 import { useColors } from "@/utils/theme";
-import { useState } from "react";
 import CountryFlag from "react-native-country-flag";
 
 export default function HomeScreen() {
-  const [language, setLanguage] = useState<Language>("Italian");
-
+  const { language, setLanguage } = useLanguage();
+  const { userName } = useProfile();
   return (
     <ParallaxScrollView
       headerBackgroundColor={{
@@ -33,7 +34,7 @@ export default function HomeScreen() {
         <Text
           style={{ fontFamily: "Artz", fontSize: 48, color: useColors().text }}
         >
-          {LanguageData[language].greeting}, Zak!
+          {LanguageData[language].greeting}, {userName}!
         </Text>
         <HelloWave />
       </ThemedView>

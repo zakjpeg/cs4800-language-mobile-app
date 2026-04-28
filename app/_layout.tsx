@@ -3,6 +3,8 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import 'react-native-reanimated';
 
+import { LanguageProvider } from "@/utils/LanguageContext";
+import { ProfileProvider } from "@/utils/ProfileContext";
 import { useFonts } from 'expo-font';
 import { SplashScreen } from 'expo-router';
 import { useEffect } from 'react';
@@ -18,6 +20,8 @@ export const unstable_settings = {
 export default function RootLayout() {
   const colorScheme = useColorScheme();
 
+  
+
   const [loaded, error] = useFonts({
     'Artz': require('@/assets/fonts/HWT_Artz.otf'),
   });
@@ -29,12 +33,16 @@ export default function RootLayout() {
   if (!loaded && !error) return null;
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-      </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    <ProfileProvider>
+      <LanguageProvider>
+        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <Stack>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+        </Stack>
+        <StatusBar style="auto" />
+      </ThemeProvider>
+    </LanguageProvider>
+    </ProfileProvider>
   );
 }
