@@ -6,12 +6,12 @@ interface ProfileContextType {
 }
 
 const ProfileContext = createContext<ProfileContextType>({
-  userName: "Zak",
+  userName: "",
   setUserName: () => {},
 });
 
 export function ProfileProvider({ children }: { children: React.ReactNode }) {
-  const [userName, setUserName] = useState("User");
+  const [userName, setUserName] = useState("Zak");
   return (
     <ProfileContext.Provider value={{ userName, setUserName }}>
       {children}
