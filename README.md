@@ -10,7 +10,13 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npm install
    ```
 
-2. Start the app
+2. Add .env.local API Key
+   Create file /.env.local
+   add line:
+      EXPO_PUBLIC_GROQ_API_KEY = (real apikey)
+
+
+3. Start the app
 
    ```bash
    npx expo start
