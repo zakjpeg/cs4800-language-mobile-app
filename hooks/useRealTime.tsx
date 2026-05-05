@@ -100,7 +100,7 @@ export const useRealTime = (options: RealTimeOptions = {}) => {
             Your objective through this roleplay is to practice ${language} with me. Always speak in ${language}, do not switch to another language under any circumstance.
             Always play your role. Under no circumstance should you break character or respond uncharacteristically to your role.
             You should always begin with a simple question, and then your following responses should include a simple, brief sentence before another question.
-            
+            Restrict your vocabulary to words, phrases, and concepts that high-school students can understand from their ${language} class course material.
             `,
           },
         }),
