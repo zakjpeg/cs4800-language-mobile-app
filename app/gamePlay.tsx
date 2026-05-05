@@ -1,260 +1,184 @@
-import { Gamemodes } from "@/utils/gamemodes";
-import { LanguageData } from "@/utils/languages";
-import { useColors } from "@/utils/theme";
-import { router, Stack, useLocalSearchParams } from "expo-router";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useRealTime } from "@/hooks/useRealTime";
+import { useLocalSearchParams } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
   Animated,
   Dimensions,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
-  TouchableOpacity,
   View,
 } from "react-native";
 
-const { width, height } = Dimensions.get("window");
+// ── Constants ─────────────────────────────────────────────────────────────────
 
-// ── Types ────────────────────────────────────────────────────────────────────
+const TEAL = "#1D9E75";
+const SAND = "#F5ECD7";
+const DARK_CARD = "#1A1A2E";
+const MUTED = "#6B6B8A";
+const BORDER = "#2A2A40";
+const AMBER = "#EF9F27";
 
-interface ChatMessage {
+const { width } = Dimensions.get("window");
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type Mood = "happy" | "listening" | "thinking" | "excited";
+
+interface TranscriptLine {
   id: string;
   role: "user" | "assistant";
   text: string;
-  points?: number;
-}
-//a
-
-type Mood = "happy" | "confused" | "angry";
-
-// ── Mood helpers ──────────────────────────────────────────────────────────────
-
-const MOOD_LADDER: Mood[] = ["angry", "confused", "happy"];
-
-function stepMoodUp(current: Mood): Mood {
-  const i = MOOD_LADDER.indexOf(current);
-  return MOOD_LADDER[Math.min(i + 1, MOOD_LADDER.length - 1)];
 }
 
-function stepMoodDown(current: Mood): Mood {
-  const i = MOOD_LADDER.indexOf(current);
-  return MOOD_LADDER[Math.max(i - 1, 0)];
-}
+// ── Orb Component ─────────────────────────────────────────────────────────────
 
-// ── API Call ──────────────────────────────────────────────────────────────────
-
-async function getChatResponse(
-  userMessage: string,
-  language: string,
-  gamemodeTopic: string,
-  conversationHistory: ChatMessage[]
-): Promise<string> {
-  const languageData = LanguageData[language as keyof typeof LanguageData];
-  if (!languageData) throw new Error("Invalid language");
-
-  // Try to get API key from environment
-  const apiKey = (process.env.EXPO_PUBLIC_GROQ_API_KEY ||
-    process.env.GROQ_API_KEY ||
-    process.env.API_KEY) as string;
-
-  if (!apiKey || apiKey === "your_api_key_here") {
-    throw new Error(
-      "API key not configured. Please set EXPO_PUBLIC_GROQ_API_KEY in .env.local and restart the dev server."
-    );
-  }
-
-  const systemPrompt = `You are a friendly NPC having a casual conversation in ${language}.
-Respond ONLY in ${language}, no English whatsoever.
-Keep responses brief (1-2 sentences).
-You must act as you are this role: ${gamemodeTopic}.
-Be natural and engaging, like you're chatting with someone.`;
-
-  const messages = [
-    { role: "system", content: systemPrompt },
-    ...conversationHistory
-      .filter((m) => m.role === "user" || m.role === "assistant")
-      .map((m) => ({
-        role: m.role,
-        content: m.text,
-      })),
-    { role: "user", content: userMessage },
-  ];
-
-  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
-      max_tokens: 150,
-      messages,
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error?.message || "API request failed");
-  }
-
-  const data = await response.json();
-  return data.choices[0].message.content;
-}
-
-// ── Initial Greeting API Call ─────────────────────────────────────────────────
-
-async function getInitialGreeting(language: string, gamemodeTopic: string): Promise<string> {
-  const languageData = LanguageData[language as keyof typeof LanguageData];
-  if (!languageData) throw new Error("Invalid language");
-
-  // Try to get API key from environment
-  const apiKey = (process.env.EXPO_PUBLIC_GROQ_API_KEY ||
-    process.env.GROQ_API_KEY ||
-    process.env.API_KEY) as string;
-
-  if (!apiKey || apiKey === "your_api_key_here") {
-    throw new Error(
-      "API key not configured. Please set EXPO_PUBLIC_GROQ_API_KEY in .env.local and restart the dev server."
-    );
-  }
-
-  const systemPrompt = `You are a friendly NPC starting a conversation in ${language}.
-Respond ONLY in ${language}, no English whatsoever.
-Provide a brief greeting (1 sentence) to start the conversation.
-You must act as you are this role: ${gamemodeTopic}.
-Be natural and engaging, like you're chatting with someone.`;
-
-  const messages = [
-    { role: "system", content: systemPrompt },
-    { role: "user", content: "Hello" },
-  ];
-
-  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
-      max_tokens: 50,  // shorter for greeting
-      messages,
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error?.message || "API request failed");
-  }
-
-  const data = await response.json();
-  return data.choices[0].message.content;
-}
-
-// ── Subcomponents ─────────────────────────────────────────────────────────────
-
-function NPCBubble({
-  name,
-  avatarUri,
-  speech,
-  styles,
+function VoiceOrb({
+  connected,
+  loading,
+  mood,
 }: {
-  name: string;
-  avatarUri?: string;
-  speech: string;
-  styles: ReturnType<typeof StyleSheet.create>;
+  connected: boolean;
+  loading: boolean;
+  mood: Mood;
 }) {
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(-10)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const glowAnim = useRef(new Animated.Value(0)).current;
+  const rotateAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    fadeAnim.setValue(0);
-    slideAnim.setValue(-10);
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
+    if (connected) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.12,
+            duration: 900,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 900,
+            useNativeDriver: true,
+          }),
+        ]),
+      ).start();
+
+      Animated.loop(
+        Animated.timing(rotateAnim, {
+          toValue: 1,
+          duration: 6000,
+          useNativeDriver: true,
+        }),
+      ).start();
+
+      Animated.timing(glowAnim, {
         toValue: 1,
-        duration: 400,
+        duration: 500,
         useNativeDriver: true,
-      }),
-      Animated.spring(slideAnim, {
+      }).start();
+    } else {
+      pulseAnim.stopAnimation();
+      rotateAnim.stopAnimation();
+      Animated.timing(pulseAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+      Animated.timing(glowAnim, {
         toValue: 0,
-        tension: 80,
-        friction: 10,
+        duration: 300,
         useNativeDriver: true,
-      }),
-    ]).start();
-  }, [speech, fadeAnim, slideAnim]);
+      }).start();
+    }
+  }, [connected]);
 
-  const avatarScaleAnim = useRef(new Animated.Value(1)).current;
-  useEffect(() => {
-    Animated.sequence([
-      Animated.timing(avatarScaleAnim, {
-        toValue: 1.18,
-        duration: 120,
-        useNativeDriver: true,
-      }),
-      Animated.spring(avatarScaleAnim, {
-        toValue: 1,
-        tension: 200,
-        friction: 8,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [avatarUri, avatarScaleAnim]);
+  const spin = rotateAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "360deg"],
+  });
+
+  const orbColor = loading
+    ? AMBER
+    : connected
+      ? mood === "excited"
+        ? "#FF6B6B"
+        : mood === "thinking"
+          ? "#A78BFA"
+          : TEAL
+      : DARK_CARD;
 
   return (
-    <View style={styles.npcRow}>
-      <View style={styles.avatarWrapper}>
-        <Animated.View
-          style={[
-            styles.avatarRing,
-            { transform: [{ scale: avatarScaleAnim }] },
-          ]}
-        >
-          {avatarUri ? (
-            <Image source={avatarUri} style={styles.avatarImage} />
-          ) : (
-            <View style={styles.avatarFallback}>
-              <Text style={styles.avatarInitial}>{name[0]}</Text>
-            </View>
-          )}
-        </Animated.View>
-        <Text style={styles.npcName}>{name}</Text>
-      </View>
-
+    <View style={orbStyles.wrapper}>
+      {/* Glow ring */}
       <Animated.View
         style={[
-          styles.speechBubble,
-          { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
+          orbStyles.glowRing,
+          {
+            opacity: glowAnim,
+            transform: [{ scale: pulseAnim }, { rotate: spin }],
+            borderColor: orbColor,
+          },
+        ]}
+      />
+      {/* Main orb */}
+      <Animated.View
+        style={[
+          orbStyles.orb,
+          { transform: [{ scale: pulseAnim }], backgroundColor: orbColor },
         ]}
       >
-        <View style={styles.bubbleTail} />
-        <Text style={styles.speechText}>{speech}</Text>
+        {loading ? (
+          <Text style={orbStyles.orbEmoji}>⏳</Text>
+        ) : connected ? (
+          <Text style={orbStyles.orbEmoji}>
+            {mood === "excited" ? "🎉" : mood === "thinking" ? "🤔" : "🎙️"}
+          </Text>
+        ) : (
+          <Text style={orbStyles.orbEmoji}>💬</Text>
+        )}
       </Animated.View>
     </View>
   );
 }
 
-function ChatBubble({
-  message,
-  isUser,
-  styles,
-  points,
-}: {
-  message: string;
-  isUser: boolean;
-  styles: ReturnType<typeof StyleSheet.create>;
-  points?: number;
-}) {
+const orbStyles = StyleSheet.create({
+  wrapper: {
+    width: 140,
+    height: 140,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  glowRing: {
+    position: "absolute",
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    borderWidth: 2,
+    borderStyle: "dashed",
+  },
+  orb: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: TEAL,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  orbEmoji: {
+    fontSize: 36,
+  },
+});
+
+// ── Transcript Bubble ─────────────────────────────────────────────────────────
+
+function TranscriptBubble({ line }: { line: TranscriptLine }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(20)).current;
+  const slideAnim = useRef(new Animated.Value(16)).current;
 
   useEffect(() => {
     Animated.parallel([
@@ -265,43 +189,117 @@ function ChatBubble({
       }),
       Animated.spring(slideAnim, {
         toValue: 0,
-        tension: 70,
+        tension: 80,
         friction: 10,
         useNativeDriver: true,
       }),
     ]).start();
-  }, [fadeAnim, slideAnim]);
+  }, []);
+
+  const isUser = line.role === "user";
 
   return (
     <Animated.View
       style={[
-        isUser ? styles.userBubbleContainer : styles.aiBubbleContainer,
+        bubbleStyles.container,
+        isUser ? bubbleStyles.userContainer : bubbleStyles.assistantContainer,
         { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
       ]}
     >
-      <View style={isUser ? styles.userBubble : styles.aiBubble}>
-        <Text style={isUser ? styles.userBubbleText : styles.aiBubbleText}>
-          {message}
+      <View
+        style={[
+          bubbleStyles.bubble,
+          isUser ? bubbleStyles.userBubble : bubbleStyles.assistantBubble,
+        ]}
+      >
+        <Text
+          style={[
+            bubbleStyles.label,
+            isUser ? bubbleStyles.userLabel : bubbleStyles.assistantLabel,
+          ]}
+        >
+          {isUser ? "YOU" : "NPC"}
         </Text>
-        {points && (
-          <Text style={styles.pointsBadge}>+{points} pts</Text>
-        )}
+        <Text
+          style={[
+            bubbleStyles.text,
+            isUser ? bubbleStyles.userText : bubbleStyles.assistantText,
+          ]}
+        >
+          {line.text}
+        </Text>
       </View>
     </Animated.View>
   );
 }
 
-function WinScreen({
-  totalScore,
-  onRetry,
-  onHome,
-  styles,
-}: {
-  totalScore: number;
-  onRetry: () => void;
-  onHome: () => void;
-  styles: ReturnType<typeof StyleSheet.create>;
-}) {
+const bubbleStyles = StyleSheet.create({
+  container: { paddingHorizontal: 16, marginVertical: 4 },
+  userContainer: { alignItems: "flex-end" },
+  assistantContainer: { alignItems: "flex-start" },
+  bubble: {
+    maxWidth: "78%",
+    borderRadius: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    gap: 3,
+  },
+  userBubble: {
+    backgroundColor: TEAL,
+    borderBottomRightRadius: 4,
+  },
+  assistantBubble: {
+    backgroundColor: DARK_CARD,
+    borderBottomLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  label: { fontSize: 9, fontWeight: "700", letterSpacing: 1.2 },
+  userLabel: { color: "rgba(255,255,255,0.6)" },
+  assistantLabel: { color: MUTED },
+  text: { fontSize: 14, lineHeight: 20 },
+  userText: { color: "#fff", fontWeight: "500" },
+  assistantText: { color: SAND },
+});
+
+// ── Score Badge ───────────────────────────────────────────────────────────────
+
+function ScoreBadge({ score, target }: { score: number; target: number }) {
+  const progress = Math.min(score / target, 1);
+  return (
+    <View style={scoreStyles.wrapper}>
+      <View style={scoreStyles.bar}>
+        <View
+          style={[scoreStyles.fill, { width: `${progress * 100}%` as any }]}
+        />
+      </View>
+      <Text style={scoreStyles.label}>
+        {score} / {target} pts
+      </Text>
+    </View>
+  );
+}
+
+const scoreStyles = StyleSheet.create({
+  wrapper: { alignItems: "center", gap: 4, width: "100%" },
+  bar: {
+    width: "60%",
+    height: 4,
+    backgroundColor: DARK_CARD,
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  fill: {
+    height: "100%",
+    backgroundColor: TEAL,
+    borderRadius: 2,
+  },
+  label: { fontSize: 11, color: MUTED, letterSpacing: 0.5 },
+});
+
+// ── Win Screen ────────────────────────────────────────────────────────────────
+
+function WinScreen({ score, onRetry }: { score: number; onRetry: () => void }) {
   const scaleAnim = useRef(new Animated.Value(0.7)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -319,554 +317,267 @@ function WinScreen({
         useNativeDriver: true,
       }),
     ]).start();
-  }, [scaleAnim, fadeAnim]);
+  }, []);
 
   return (
     <Animated.View
       style={[
-        styles.winContainer,
+        winStyles.container,
         { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
       ]}
     >
-      <Text style={styles.winEmoji}>🎉</Text>
-      <Text style={styles.winTitle}>You Win!</Text>
-      <Text style={styles.winScore}>{totalScore} Points</Text>
-      <Text style={styles.winSubtitle}>Great job practicing!</Text>
-
-      <View style={styles.winButtons}>
-        <TouchableOpacity style={styles.playButton} onPress={onRetry}>
-          <Text style={styles.playButtonText}>Play Again</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.backButton} onPress={onHome}>
-          <Text style={styles.playButtonText}>Home</Text>
-        </TouchableOpacity>
-      </View>
+      <Text style={winStyles.emoji}>🎉</Text>
+      <Text style={winStyles.title}>You Win!</Text>
+      <Text style={winStyles.score}>{score} pts</Text>
+      <Text style={winStyles.subtitle}>Great conversation!</Text>
+      <Pressable style={winStyles.button} onPress={onRetry}>
+        <Text style={winStyles.buttonText}>Play Again</Text>
+      </Pressable>
     </Animated.View>
   );
 }
 
-function showLeaveAlert() {
-  Alert.alert("End Game", "Are you sure you want to leave?", [
-    { text: "Stay", style: "cancel" },
-    {
-      text: "Leave",
-      onPress: () => {
-        router.dismiss();
-        router.replace("/");
-      },
-    },
-  ]);
-}
+const winStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    padding: 32,
+  },
+  emoji: { fontSize: 72 },
+  title: { fontSize: 36, fontWeight: "800", color: SAND, letterSpacing: 1 },
+  score: { fontSize: 52, fontWeight: "800", color: TEAL, letterSpacing: 2 },
+  subtitle: { fontSize: 15, color: MUTED, marginBottom: 8 },
+  button: {
+    marginTop: 16,
+    backgroundColor: TEAL,
+    paddingHorizontal: 40,
+    paddingVertical: 14,
+    borderRadius: 999,
+  },
+  buttonText: { color: "#fff", fontSize: 17, fontWeight: "700" },
+});
 
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
 const TARGET_SCORE = 15;
 
-export default function GameplayScreen() {
+export default function VoiceGameScreen() {
   const { gamemodeKey, language } = useLocalSearchParams();
-  const gamemode = Gamemodes[gamemodeKey as string];
-
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [inputText, setInputText] = useState("");
-  const [totalScore, setTotalScore] = useState(0);
-  const [isLoading, setIsLoading] = useState(false);
+  const [connected, setConnected] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [mood, setMood] = useState<Mood>("happy");
+  const [transcript, setTranscript] = useState<TranscriptLine[]>([]);
+  const [score, setScore] = useState(0);
   const [hasWon, setHasWon] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
 
-  const scrollViewRef = useRef<ScrollView>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
 
-  const topicString = gamemode?.topics?.join(", ") || "general conversation";
-
-  const handleLeaveGame = useCallback(() => {
-    router.replace("/");
-  }, []);
-
-  // Initial greeting from NPC
-  useEffect(() => {
-    const sendInitialGreeting = async () => {
-      try {
-        const greeting = await getInitialGreeting(language as string, topicString);
-        const initialMsg: ChatMessage = {
-          id: "0",
-          role: "assistant",
-          text: greeting,
-        };
-        setMessages([initialMsg]);
-      } catch (err) {
-        setErrorMsg("Failed to initialize conversation");
-      }
-    };
-
-    sendInitialGreeting();
-
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, []);
-
-  const handleSendMessage = useCallback(async () => {
-    if (!inputText.trim() || isLoading) return;
-
-    const userMsg: ChatMessage = {
-      id: Date.now().toString(),
-      role: "user",
-      text: inputText.trim(),
-    };
-
-    setMessages((prev) => [...prev, userMsg]);
-    setInputText("");
-    setIsLoading(true);
-    setErrorMsg("");
-
-    try {
-      const response = await getChatResponse(
-        userMsg.text,
-        language as string,
-        topicString,
-        messages
-      );
-      
-////////
-      //
-      //
-      //TO BE REPLACE WITH ACTUAL SCORING LOGIC BASED ON RESPONSE QUALITY
-      //
-      //
-////////
-      const points = Math.floor(Math.random() * 5) + 1;
-      const newScore = totalScore + points;
-
-      const aiMsg: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        text: response,
-        points,
+  const { startSession, stopSession } = useRealTime({
+    onTranscript: (text, role) => {
+      const line: TranscriptLine = {
+        id: Date.now().toString(),
+        role,
+        text,
       };
+      setTranscript((prev) => [...prev, line]);
 
-      setMessages((prev) => [...prev, aiMsg]);
-      setTotalScore(newScore);
-
-      if (newScore >= TARGET_SCORE) {
-        setHasWon(true);
+      if (role === "user") {
+        setMood("thinking");
+        // Award random points for now — replace with real scoring
+        const pts = Math.floor(Math.random() * 4) + 1;
+        setScore((prev) => {
+          const next = prev + pts;
+          if (next >= TARGET_SCORE) setHasWon(true);
+          return next;
+        });
       } else {
-        setMood((m) => stepMoodUp(m));
+        setMood("excited");
+        setTimeout(() => setMood("listening"), 1500);
       }
-    } catch (err) {
-      console.error("Chat error:", err);
-      const errorMsg =
-        err instanceof Error ? err.message : "Failed to get response";
-      setErrorMsg(errorMsg);
-      setMood((m) => stepMoodDown(m));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [inputText, isLoading, totalScore, messages, language, topicString]);
-
-  const handleRetry = () => {
-    setMessages([
-      {
-        id: "0",
-        role: "assistant",
-        text: `Hola! Como estás?`,
-      },
-    ]);
-    setInputText("");
-    setTotalScore(0);
-    setMood("happy");
-    setHasWon(false);
-    setErrorMsg("");
-  };
-
-  const handleHome = () => {
-    router.dismiss();
-    router.replace("/");
-  };
-
-  const colors = useColors();
-
-  const styles = StyleSheet.create({
-    safe: { flex: 1, backgroundColor: colors.surface },
-    container: {
-      flex: 1,
-      paddingHorizontal: 16,
-      paddingTop: 12,
-      paddingBottom: 16,
     },
-
-    // ── Header
-    header: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      marginBottom: 12,
-      paddingHorizontal: 8,
-    },
-    title: {
-      fontFamily: "Artz",
-      fontSize: 24,
-      fontWeight: "700",
-      color: colors.text,
-    },
-    scoreDisplay: {
-      backgroundColor: colors.accent,
-      paddingHorizontal: 16,
-      paddingVertical: 8,
-      borderRadius: 20,
-      minWidth: 100,
-    },
-    scoreText: {
-      color: "#fff",
-      fontSize: 16,
-      fontWeight: "700",
-      textAlign: "center",
-    },
-    scoreLabel: {
-      color: "#fff",
-      fontSize: 11,
-      textAlign: "center",
-      marginTop: 2,
-    },
-
-    // ── NPC Area
-    npcContainer: {
-      paddingHorizontal: 8,
-      marginBottom: 16,
-      marginTop: 8,
-    },
-    npcRow: { flexDirection: "row", alignItems: "flex-start", gap: 14 },
-    avatarWrapper: { alignItems: "center", gap: 6, paddingTop: 4 },
-    avatarRing: {
-      width: 56,
-      height: 56,
-      borderRadius: 28,
-      borderWidth: 2.5,
-      borderColor: colors.accent,
-      padding: 2,
-      overflow: "hidden",
-    },
-    avatarImage: { width: "100%", height: "100%", borderRadius: 26 },
-    avatarFallback: {
-      flex: 1,
-      backgroundColor: colors.accent,
-      borderRadius: 26,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    avatarInitial: { color: "#fff", fontSize: 20, fontWeight: "700" },
-    npcName: {
-      color: colors.primary,
-      fontSize: 10,
-      letterSpacing: 0.5,
-      textTransform: "uppercase",
-      fontWeight: "600",
-      fontFamily: "Artz",
-    },
-    speechBubble: {
-      flex: 1,
-      backgroundColor: "white",
-      borderRadius: 16,
-      borderTopLeftRadius: 4,
-      padding: 14,
-      shadowColor: "#000",
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.15,
-      shadowRadius: 8,
-      elevation: 4,
-    },
-    bubbleTail: {
-      position: "absolute",
-      left: -8,
-      top: 12,
-      width: 0,
-      height: 0,
-      borderTopWidth: 8,
-      borderBottomWidth: 8,
-      borderRightWidth: 10,
-      borderTopColor: "transparent",
-      borderBottomColor: "transparent",
-      borderRightColor: "white",
-    },
-    speechText: {
-      fontSize: 15,
-      lineHeight: 22,
-      color: "#1A1A2E",
-    },
-
-    // ── Chat Messages
-    messagesContainer: {
-      flex: 1,
-      gap: 8,
-      paddingHorizontal: 8,
-      marginBottom: 12,
-    },
-    userBubbleContainer: {
-      flexDirection: "row",
-      justifyContent: "flex-end",
-      paddingHorizontal: 8,
-      marginVertical: 4,
-    },
-    aiBubbleContainer: {
-      flexDirection: "row",
-      justifyContent: "flex-start",
-      paddingHorizontal: 8,
-      marginVertical: 4,
-    },
-    userBubble: {
-      backgroundColor: colors.accent,
-      borderRadius: 16,
-      borderBottomRightRadius: 4,
-      paddingVertical: 10,
-      paddingHorizontal: 14,
-      maxWidth: "75%",
-    },
-    aiBubble: {
-      backgroundColor: CARD_BG,
-      borderRadius: 16,
-      borderBottomLeftRadius: 4,
-      paddingVertical: 10,
-      paddingHorizontal: 14,
-      maxWidth: "75%",
-    },
-    userBubbleText: {
-      color: "#fff",
-      fontSize: 15,
-      lineHeight: 20,
-      fontWeight: "500",
-    },
-    aiBubbleText: {
-      color: SAND,
-      fontSize: 15,
-      lineHeight: 20,
-    },
-    pointsBadge: {
-      color: "#FFD700",
-      fontSize: 12,
-      fontWeight: "700",
-      marginTop: 4,
-    },
-
-    // ── Error
-    errorBanner: {
-      backgroundColor: WRONG_COLOR,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 8,
-      marginHorizontal: 8,
-      marginBottom: 8,
-    },
-    errorText: {
-      color: "#fff",
-      fontSize: 13,
-      fontWeight: "500",
-    },
-
-    // ── Input Area
-    inputContainer: {
-      flexDirection: "row",
-      gap: 8,
-      paddingHorizontal: 8,
-      paddingVertical: 8,
-      backgroundColor: colors.surfaceAlt,
-      borderRadius: 12,
-    },
-    input: {
-      flex: 1,
-      backgroundColor: colors.surface,
-      borderRadius: 8,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      fontSize: 15,
-      color: colors.text,
-      borderWidth: 1,
-      borderColor: MUTED,
-    },
-    sendButton: {
-      width: 42,
-      height: 42,
-      borderRadius: 8,
-      backgroundColor: colors.accent,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    sendButtonText: {
-      fontSize: 18,
-      color: "#fff",
-    },
-
-    // ── Win Screen
-    winContainer: {
-      flex: 1,
-      alignItems: "center",
-      justifyContent: "center",
-      paddingHorizontal: 32,
-      gap: 12,
-    },
-    winEmoji: { fontSize: 72, marginBottom: 8 },
-    winTitle: {
-      fontFamily: "Artz",
-      fontSize: 36,
-      fontWeight: "700",
-      color: colors.text,
-    },
-    winScore: {
-      fontSize: 48,
-      fontWeight: "800",
-      color: colors.accent,
-      letterSpacing: 2,
-    },
-    winSubtitle: {
-      fontSize: 16,
-      color: MUTED,
-      marginBottom: 12,
-    },
-    winButtons: {
-      flexDirection: "column",
-      gap: 8,
-      marginTop: 24,
-      width: "100%",
-    },
-    playButton: {
-      borderRadius: 500,
-      backgroundColor: colors.tint,
-      paddingVertical: 12,
-    },
-    backButton: {
-      borderRadius: 500,
-      backgroundColor: "#f3f3e3",
-      paddingVertical: 12,
-    },
-    playButtonText: {
-      fontFamily: "Artz",
-      fontSize: 24,
-      textAlign: "center",
-      color: colors.text,
-    },
-    leaveButton: {
-      paddingVertical: 8,
-      marginTop: 12,
-    },
-    leaveButtonText: {
-      color: MUTED,
-      textAlign: "center",
-      fontSize: 14,
-    },
+    onConnected: () => setMood("listening"),
+    onDisconnected: () => setMood("happy"),
   });
 
-  return (
-    <>
-      <Stack.Screen options={{ title: gamemode?.title ?? "Game" }} />
+  const handlePress = async () => {
+    if (connected) {
+      stopSession();
+      setConnected(false);
+    } else {
+      setLoading(true);
+      try {
+        await startSession({ gamemodeKey, language });
+        setConnected(true);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  const handleRetry = () => {
+    setScore(0);
+    setHasWon(false);
+    setTranscript([]);
+    setMood("happy");
+    stopSession();
+    setConnected(false);
+  };
+
+  const statusText = loading
+    ? "Connecting..."
+    : connected
+      ? mood === "thinking"
+        ? "Processing..."
+        : "Speak now"
+      : "Tap to start";
+
+  if (hasWon) {
+    return (
       <View style={styles.safe}>
-        {hasWon ? (
-          <View style={styles.container}>
-            <WinScreen
-              totalScore={totalScore}
-              onRetry={handleRetry}
-              onHome={handleHome}
-              styles={styles}
-            />
-          </View>
-        ) : (
-          <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
-            style={styles.container}
-          >
-            {/* Header with Score */}
-            <View style={styles.header}>
-              <Text style={styles.title}>{gamemode?.title}</Text>
-              <View style={styles.scoreDisplay}>
-                <Text style={styles.scoreText}>{totalScore}/15</Text>
-                <Text style={styles.scoreLabel}>points</Text>
-              </View>
-            </View>
+        <WinScreen score={score} onRetry={handleRetry} />
+      </View>
+    );
+  }
 
-            {/* NPC Greeting */}
-            {messages.length > 0 && messages[0].role === "assistant" && (
-              <View style={styles.npcContainer}>
-                <NPCBubble
-                  name={gamemode?.npcName || "NPC"}
-                  avatarUri={gamemode?.avatars?.[mood]}
-                  speech={messages[0].text}
-                  styles={styles}
-                />
-              </View>
-            )}
+  return (
+    <View style={styles.safe}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Voice Practice</Text>
+        <ScoreBadge score={score} target={TARGET_SCORE} />
+      </View>
 
-            {/* Chat Messages */}
-            <ScrollView
-              ref={scrollViewRef}
-              style={styles.messagesContainer}
-              onContentSizeChange={() =>
-                scrollViewRef.current?.scrollToEnd({ animated: true })
-              }
-            >
-              {messages.slice(1).map((msg) => (
-                <ChatBubble
-                  key={msg.id}
-                  message={msg.text}
-                  isUser={msg.role === "user"}
-                  points={msg.points}
-                  styles={styles}
-                />
-              ))}
-              {isLoading && (
-                <View style={styles.aiBubbleContainer}>
-                  <View style={styles.aiBubble}>
-                    <ActivityIndicator color={SAND} size="small" />
-                  </View>
-                </View>
-              )}
-            </ScrollView>
+      {/* Transcript */}
+      <ScrollView
+        ref={scrollRef}
+        style={styles.transcript}
+        contentContainerStyle={styles.transcriptContent}
+        onContentSizeChange={() =>
+          scrollRef.current?.scrollToEnd({ animated: true })
+        }
+      >
+        {transcript.length === 0 && (
+          <Text style={styles.emptyHint}>
+            Connect and start speaking to begin your practice session.
+          </Text>
+        )}
+        {transcript.map((line) => (
+          <TranscriptBubble key={line.id} line={line} />
+        ))}
+      </ScrollView>
 
-            {/* Error Message */}
-            {errorMsg && (
-              <View style={styles.errorBanner}>
-                <Text style={styles.errorText}>{errorMsg}</Text>
-              </View>
-            )}
+      {/* Orb + Controls */}
+      <View style={styles.controls}>
+        <Text style={styles.statusText}>{statusText}</Text>
 
-            {/* Input Area */}
-            <View style={styles.inputContainer}>
-              <TextInput
-                style={styles.input}
-                placeholder="Type your response..."
-                placeholderTextColor={MUTED}
-                value={inputText}
-                onChangeText={setInputText}
-                editable={!isLoading}
-                multiline
-                maxLength={200}
-              />
-              <TouchableOpacity
-                style={styles.sendButton}
-                onPress={handleSendMessage}
-                disabled={!inputText.trim() || isLoading}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.sendButtonText}>
-                  {isLoading ? "..." : "→"}
-                </Text>
-              </TouchableOpacity>
-            </View>
+        <VoiceOrb connected={connected} loading={loading} mood={mood} />
 
-            {/* Leave Button */}
-            <TouchableOpacity
-              style={styles.leaveButton}
-              onPress={handleLeaveGame}
-            >
-              <Text style={styles.leaveButtonText}>Leave Game</Text>
-            </TouchableOpacity>
-          </KeyboardAvoidingView>
+        <Pressable
+          onPress={handlePress}
+          disabled={loading}
+          style={({ pressed }) => [
+            styles.button,
+            connected && styles.buttonActive,
+            pressed && styles.buttonPressed,
+          ]}
+        >
+          <Text style={styles.buttonText}>
+            {loading ? "Connecting..." : connected ? "Disconnect" : "Connect"}
+          </Text>
+        </Pressable>
+
+        {connected && (
+          <Text style={styles.hint}>
+            The NPC is listening — speak naturally
+          </Text>
         )}
       </View>
-    </>
+    </View>
   );
 }
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+// ── Styles ────────────────────────────────────────────────────────────────────
 
-const SAND = "#F5ECD7";
-const CARD_BG = "#242438";
-const MUTED = "#6B6B8A";
-const WRONG_COLOR = "#C62828";
+const styles = StyleSheet.create({
+  safe: {
+    flex: 1,
+    backgroundColor: "#0F0F1A",
+  },
+  header: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 12,
+    alignItems: "center",
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+  headerTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: MUTED,
+    letterSpacing: 2,
+    textTransform: "uppercase",
+  },
+  transcript: {
+    flex: 1,
+  },
+  transcriptContent: {
+    paddingVertical: 16,
+    gap: 4,
+    flexGrow: 1,
+    justifyContent: "flex-end",
+  },
+  emptyHint: {
+    color: MUTED,
+    fontSize: 14,
+    textAlign: "center",
+    paddingHorizontal: 40,
+    lineHeight: 22,
+  },
+  controls: {
+    alignItems: "center",
+    paddingVertical: 28,
+    paddingHorizontal: 24,
+    gap: 16,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+  },
+  statusText: {
+    fontSize: 13,
+    color: MUTED,
+    letterSpacing: 0.5,
+    height: 18,
+  },
+  button: {
+    paddingHorizontal: 40,
+    paddingVertical: 14,
+    borderRadius: 999,
+    backgroundColor: DARK_CARD,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  buttonActive: {
+    backgroundColor: "#3D0000",
+    borderColor: "#C62828",
+  },
+  buttonPressed: {
+    opacity: 0.8,
+    transform: [{ scale: 0.97 }],
+  },
+  buttonText: {
+    color: SAND,
+    fontSize: 15,
+    fontWeight: "600",
+    letterSpacing: 0.5,
+  },
+  hint: {
+    fontSize: 12,
+    color: MUTED,
+    textAlign: "center",
+  },
+});

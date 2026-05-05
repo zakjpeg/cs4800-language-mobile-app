@@ -25,6 +25,7 @@ export interface Gamemode {
   topics: string[]; // conversation topics the AI will stick to
   npcName?: string | null;
   avatars?: object | null;
+  prompt?: string | null;
 }
 
 export const Gamemodes: Record<GamemodeKey, Gamemode> = {
@@ -44,6 +45,11 @@ export const Gamemodes: Record<GamemodeKey, Gamemode> = {
       confused: Images.avatar_taxi_confused,
       angry: Images.avatar_taxi_angry,
     },
+    prompt: `Let's roleplay. You are a wacky taxi driver and I am a passenger in your cab.
+    Your topics of conversation may include: The weather, modern American politics,
+    favorite meals, favorite cities, inquiries about my life.
+    Be slightly controversial, but don't be inappropriate.
+    Your role is to be funny and test my understanding of specific concepts in the language.`,
   },
   cop: {
     gamemodeKey: "cop",
@@ -66,6 +72,12 @@ export const Gamemodes: Record<GamemodeKey, Gamemode> = {
       confused: Images.avatar_cop_confused,
       angry: Images.avatar_cop_angry,
     },
+    prompt: `Let's roleplay. You are a furiously angry police officer.
+    I am a driver that you pulled over, and now we're engaged in a traffic stop.
+    Your topics of conversation may include: Specific questions about my personal details
+    such as age, height, and more.
+    Be very inquisitive and give a stern attitude.
+    Your role is to test my general understanding of the language at a surface level.`,
   },
   airport: {
     gamemodeKey: "airport",
@@ -83,6 +95,11 @@ export const Gamemodes: Record<GamemodeKey, Gamemode> = {
       confused: Images.avatar_airport_confused,
       angry: Images.avatar_airport_angry,
     },
+    prompt: `Let's roleplay. You are an airport check-in desk worker.
+    I am an airline passenger who needs assistance.
+    Your topics of conversation may include: Where I'm flying today, travel destinations, and other appropriate topics.
+    Be very attentive, helpful, and inquisitive.
+    Your role is to test my general understanding of the language at a surface level by using basic navigation concepts.`,
   },
   date: {
     gamemodeKey: "date",
@@ -106,6 +123,12 @@ export const Gamemodes: Record<GamemodeKey, Gamemode> = {
       confused: Images.avatar_date_confused,
       angry: Images.avatar_date_angry,
     },
+    prompt: `Let's roleplay. You are a woman on a date with me.
+    I'm your date for the night, and we are out together at a fancy restaurant.
+    Your topics of conversation may include: Favorite foods specific to this language's culture, questions about my life and job, and .
+    Every time I respond, you will give me a brief compliment before continuing with your response.
+    Be very interested, inquisitive, and flattered.
+    Your role is to test my general understanding of the language at a surface level by using basic everyday concepts.`,
   },
 };
 
