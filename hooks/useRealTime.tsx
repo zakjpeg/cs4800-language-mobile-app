@@ -6,21 +6,23 @@ interface RealTimeOptions {
   onTranscript?: (text: string, role: "user" | "assistant") => void;
   onConnected?: () => void;
   onDisconnected?: () => void;
+  onVolume?: (volume: number, source: "assistant" | "user") => void;
 }
 
 export const useRealTime = (options: RealTimeOptions = {}) => {
-  const { onTranscript, onConnected, onDisconnected } = options;
+  const { onTranscript, onConnected, onDisconnected, onVolume } = options;
 
-  const pcRef = { current: null as RTCPeerConnection | null };
-  const streamRef = { current: null as MediaStream | null };
-  const audioElRef = { current: null as HTMLAudioElement | null };
+  const pcRef       = { current: null as RTCPeerConnection | null };
+  const streamRef   = { current: null as MediaStream | null };
+  const audioElRef  = { current: null as HTMLAudioElement | null };
+  const audioCtxRef = { current: null as AudioContext | null };
+  // Separate RAF handles so assistant and user polls don't clobber each other
+  const rafAssistantRef = { current: null as number | null };
+  const rafUserRef      = { current: null as number | null };
 
   const waitForIceGathering = (pc: RTCPeerConnection): Promise<void> => {
     return new Promise((resolve) => {
-      if (pc.iceGatheringState === "complete") {
-        resolve();
-        return;
-      }
+      if (pc.iceGatheringState === "complete") { resolve(); return; }
       const check = () => {
         if (pc.iceGatheringState === "complete") {
           pc.removeEventListener("icegatheringstatechange", check);
@@ -29,6 +31,37 @@ export const useRealTime = (options: RealTimeOptions = {}) => {
       };
       pc.addEventListener("icegatheringstatechange", check);
     });
+  };
+
+  /**
+   * Hooks up an AnalyserNode to a MediaStream and polls RMS volume on every
+   * animation frame. Each source ("assistant" | "user") uses its own RAF handle
+   * so they run independently and can be cancelled independently.
+   */
+
+  const startVolumePolling = (stream: MediaStream, source: "assistant" | "user") => {
+    const ctx = audioCtxRef.current ?? new AudioContext();
+    audioCtxRef.current = ctx;
+
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.6
+
+    const src = ctx.createMediaStreamSource(stream);
+    src.connect(analyser);
+
+    const buffer = new Float32Array(analyser.fftSize);
+    const rafRef = source === "assistant" ? rafAssistantRef : rafUserRef;
+
+    const poll = () => {
+      analyser.getFloatTimeDomainData(buffer);
+      const rms = Math.sqrt(buffer.reduce((s, x) => s + x * x, 0) / buffer.length);
+      const normalised = Math.min(rms * (source === "user" ? 3 : 6), 1);
+      onVolume?.(normalised, source);
+      rafRef.current = requestAnimationFrame(poll);
+    };
+
+    rafRef.current = requestAnimationFrame(poll);
   };
 
   const startSession = async ({
@@ -67,11 +100,17 @@ export const useRealTime = (options: RealTimeOptions = {}) => {
       audio.srcObject = event.streams[0];
       document.body.appendChild(audio);
       audioElRef.current = audio;
+
+      // Poll assistant (incoming) audio volume
+      startVolumePolling(event.streams[0], "assistant");
     };
 
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     streamRef.current = stream;
     stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+
+    // Poll user (mic) audio volume
+    startVolumePolling(stream, "user");
 
     const dc = pc.createDataChannel("oai-events");
 
@@ -110,15 +149,11 @@ export const useRealTime = (options: RealTimeOptions = {}) => {
     dc.onmessage = (event: MessageEvent) => {
       const data = JSON.parse(event.data);
 
-      // Assistant transcript (what the NPC said)
       if (data.type === "response.audio_transcript.done") {
         onTranscript?.(data.transcript, "assistant");
       }
 
-      // User transcript (what the user said, requires input_audio_transcription)
-      if (
-        data.type === "conversation.item.input_audio_transcription.completed"
-      ) {
+      if (data.type === "conversation.item.input_audio_transcription.completed") {
         onTranscript?.(data.transcript, "user");
       }
     };
@@ -150,6 +185,19 @@ export const useRealTime = (options: RealTimeOptions = {}) => {
   };
 
   const stopSession = () => {
+    // Cancel both polling loops independently
+    if (rafAssistantRef.current !== null) {
+      cancelAnimationFrame(rafAssistantRef.current);
+      rafAssistantRef.current = null;
+    }
+    if (rafUserRef.current !== null) {
+      cancelAnimationFrame(rafUserRef.current);
+      rafUserRef.current = null;
+    }
+
+    audioCtxRef.current?.close();
+    audioCtxRef.current = null;
+
     streamRef.current?.getTracks().forEach((t) => t.stop());
     pcRef.current?.close();
     audioElRef.current?.remove();

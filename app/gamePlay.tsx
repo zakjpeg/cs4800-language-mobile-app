@@ -1,4 +1,6 @@
 import { useRealTime } from "@/hooks/useRealTime";
+import { NPCCharacter } from "@/components/NPCCharacter";
+import { UserAvatar } from "@/components/UserAvatar";
 import { useLocalSearchParams } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -31,6 +33,8 @@ interface TranscriptLine {
   role: "user" | "assistant";
   text: string;
 }
+
+// NPCCharacter is imported from @/components/NPCCharacter
 
 // ── Orb Component ─────────────────────────────────────────────────────────────
 
@@ -372,6 +376,14 @@ export default function VoiceGameScreen() {
   const [score, setScore] = useState(0);
   const [hasWon, setHasWon] = useState(false);
 
+  // ── NPC talking state ──────────────────────────────────────────────────────
+  // `npcVolume` is a 0–1 value reflecting how loud the NPC audio currently is.
+  // `npcSpeaking` is true while the assistant is actively playing audio.
+  const [npcVolume, setNpcVolume] = useState(0);
+  const [npcSpeaking, setNpcSpeaking] = useState(false);
+  const [userVolume, setUserVolume] = useState(0);  
+  const [userSpeaking, setUserSpeaking] = useState(false);
+
   const scrollRef = useRef<ScrollView>(null);
 
   const { startSession, stopSession } = useRealTime({
@@ -398,13 +410,35 @@ export default function VoiceGameScreen() {
       }
     },
     onConnected: () => setMood("listening"),
-    onDisconnected: () => setMood("happy"),
+    onDisconnected: () => {
+      setMood("happy");
+      setNpcSpeaking(false);
+      setNpcVolume(0);
+    },
+
+    // ── Volume callback ──────────────────────────────────────────────────────
+    // Wire this up in useRealTime: call onVolume(normalised) with values 0–1
+    // whenever you receive audio data from the assistant stream.
+    // e.g. in your AudioWorklet / onmessage handler:
+    //   const rms = Math.sqrt(samples.reduce((s,x) => s + x*x, 0) / samples.length);
+    //   options.onVolume?.(Math.min(rms * 6, 1));  // scale as needed
+    onVolume: (vol: number, source: "assistant" | "user") => {
+      if (source === "assistant") {
+        setNpcVolume(vol);
+        setNpcSpeaking(vol > 0.01);
+      } else if (source === "user") {
+        setUserSpeaking(vol > 0.01);
+        setUserVolume(vol);
+      }
+    },
   });
 
   const handlePress = async () => {
     if (connected) {
       stopSession();
       setConnected(false);
+      setNpcSpeaking(false);
+      setNpcVolume(0);
     } else {
       setLoading(true);
       try {
@@ -423,9 +457,15 @@ export default function VoiceGameScreen() {
     setHasWon(false);
     setTranscript([]);
     setMood("happy");
+    setNpcSpeaking(false);
+    setNpcVolume(0);
     stopSession();
     setConnected(false);
   };
+
+  useEffect(() => {
+    return () => { stopSession(); };
+  }, []);
 
   const statusText = loading
     ? "Connecting..."
@@ -474,7 +514,30 @@ export default function VoiceGameScreen() {
       <View style={styles.controls}>
         <Text style={styles.statusText}>{statusText}</Text>
 
-        <VoiceOrb connected={connected} loading={loading} mood={mood} />
+        {/* NPC face + orb row */}
+        <View style={styles.avatarRow}>
+          {/* NPC talking face — visible when connected */}
+          <View style={styles.npcFaceWrapper}>
+            {connected && (
+              <>
+                <Text style={styles.npcLabel}>NPC</Text>
+                <NPCCharacter gamemode={gamemodeKey as any} volume={npcVolume} isSpeaking={npcSpeaking} />
+              </>
+            )}
+          </View>
+
+          <VoiceOrb connected={connected} loading={loading} mood={mood} />
+
+          {/* User avatar — visible when connected */}
+          <View style={styles.npcFaceWrapper}>
+            {connected && (
+              <>
+                <Text style={styles.npcLabel}>YOU</Text>
+                <UserAvatar isSpeaking={userSpeaking} volume={userVolume} />
+              </>
+            )}
+          </View>
+        </View>
 
         <Pressable
           onPress={handlePress}
@@ -552,6 +615,24 @@ const styles = StyleSheet.create({
     color: MUTED,
     letterSpacing: 0.5,
     height: 18,
+  },
+  avatarRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 24,
+    width: "100%",
+  },
+  npcFaceWrapper: {
+    width: 90,
+    alignItems: "center",
+    gap: 6,
+  },
+  npcLabel: {
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 1.5,
+    color: MUTED,
   },
   button: {
     paddingHorizontal: 40,

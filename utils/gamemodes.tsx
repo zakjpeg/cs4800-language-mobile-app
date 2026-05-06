@@ -26,6 +26,7 @@ export interface Gamemode {
   npcName?: string | null;
   avatars?: object | null;
   prompt?: string | null;
+  characterName?: string | null;
 }
 
 export const Gamemodes: Record<GamemodeKey, Gamemode> = {
@@ -50,6 +51,7 @@ export const Gamemodes: Record<GamemodeKey, Gamemode> = {
     favorite meals, favorite cities, inquiries about my life.
     Be slightly controversial, but don't be inappropriate.
     Your role is to be funny and test my understanding of specific concepts in the language.`,
+    characterName: "Taxi Man"
   },
   cop: {
     gamemodeKey: "cop",
@@ -78,6 +80,7 @@ export const Gamemodes: Record<GamemodeKey, Gamemode> = {
     such as age, height, and more.
     Be very inquisitive and give a stern attitude.
     Your role is to test my general understanding of the language at a surface level.`,
+    characterName: "Cop",
   },
   airport: {
     gamemodeKey: "airport",
@@ -100,6 +103,7 @@ export const Gamemodes: Record<GamemodeKey, Gamemode> = {
     Your topics of conversation may include: Where I'm flying today, travel destinations, and other appropriate topics.
     Be very attentive, helpful, and inquisitive.
     Your role is to test my general understanding of the language at a surface level by using basic navigation concepts.`,
+    characterName: "Airline Worker"
   },
   date: {
     gamemodeKey: "date",
@@ -129,6 +133,7 @@ export const Gamemodes: Record<GamemodeKey, Gamemode> = {
     Every time I respond, you will give me a brief compliment before continuing with your response.
     Be very interested, inquisitive, and flattered.
     Your role is to test my general understanding of the language at a surface level by using basic everyday concepts.`,
+    characterName: "Date",
   },
 };
 
