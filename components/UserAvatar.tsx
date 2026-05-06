@@ -94,7 +94,8 @@ export function UserAvatar({ volume, isSpeaking }: UserAvatarProps) {
   return (
     <Animated.View style={[styles.wrapper, { transform: [{ translateY: bounceY }] }]}>
       <Image source={frames[frame]} style={styles.image} resizeMode="contain" />
-      <Text style={{ color: "#ffff00", fontSize: 24 }}>{Number(volume).toFixed(3)}</Text>
+      {/* DEBUG: Comment out the line below to disable audio debugger */}
+      <Text style={{ color: "#ffff00", fontSize: 12 }}>Audio Debugger: {Number(volume).toFixed(3)}</Text> 
     </Animated.View>
   );
 }

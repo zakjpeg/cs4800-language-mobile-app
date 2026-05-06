@@ -71,7 +71,15 @@ export const useRealTime = (options: RealTimeOptions = {}) => {
     gamemodeKey: string;
     language: string;
   }) => {
-    const res = await fetch(`${backendURL}/session`);
+    const res = await fetch(`${backendURL}/session`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        voice: Gamemodes[gamemodeKey].voice,
+      }),
+    });
     const session = await res.json();
     const clientSecret = session?.client_secret?.value;
     if (!clientSecret) throw new Error("Missing client secret from backend");
@@ -134,13 +142,25 @@ export const useRealTime = (options: RealTimeOptions = {}) => {
         JSON.stringify({
           type: "response.create",
           response: {
-            instructions: `LANGUAGE: ${language}; ${Gamemodes[`${gamemodeKey}`].prompt}.
-            RULES: Every response should always be 2 brief sentences.
-            Your objective through this roleplay is to practice ${language} with me. Always speak in ${language}, do not switch to another language under any circumstance.
-            Always play your role. Under no circumstance should you break character or respond uncharacteristically to your role.
-            You should always begin with a simple question, and then your following responses should include a simple, brief sentence before another question.
-            Restrict your vocabulary to words, phrases, and concepts that high-school students can understand from their ${language} class course material.
-            `,
+            instructions:`
+Stay in character at all times.
+
+LANGUAGE:
+- Only speak in ${language}. Never use any other language.
+
+RESPONSE FORMAT (STRICT):
+- Exactly 2 sentences.
+- Sentence 1: a simple question.
+- Sentence 2: a short statement.
+- Do not add anything else.
+
+STYLE:
+- Use simple vocabulary (high-school level).
+- Keep sentences short and clear.
+
+CONTEXT:
+${Gamemodes[gamemodeKey].prompt}
+`,
           },
         }),
       );
