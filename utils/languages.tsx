@@ -1,4 +1,4 @@
-export type Language = "French" | "Italian" | "Spanish" | "English";
+export type Language = "French" | "Italian" | "Spanish" | "English" | "Mandarin";
 
 interface LanguageDataEntry {
   greeting: string;
@@ -21,5 +21,9 @@ export const LanguageData: Record<Language, LanguageDataEntry> = {
   English: {
     greeting: "Hello",
     countryCode: "us",
+  },
+  Mandarin: {
+    greeting: "Ni Hao",
+    countryCode: "cn",
   },
 };
