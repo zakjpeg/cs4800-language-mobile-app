@@ -1,6 +1,6 @@
 import { Gamemodes } from "@/utils/gamemodes";
 
-const backendURL = "http://192.168.56.1:8000";
+const backendURL = "http://192.168.86.22:8000";
 
 interface RealTimeOptions {
   onTranscript?: (text: string, role: "user" | "assistant") => void;

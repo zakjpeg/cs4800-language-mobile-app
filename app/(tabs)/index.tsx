@@ -2,9 +2,7 @@ import { Image } from "expo-image";
 import {
   FlatList,
   StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+  Text
 } from "react-native";
 
 import { HelloWave } from "@/components/hello-wave";
@@ -17,7 +15,6 @@ import { useLanguage } from "@/utils/LanguageContext";
 import { LanguageData } from "@/utils/languages";
 import { useProfile } from "@/utils/ProfileContext";
 import { useColors } from "@/utils/theme";
-import CountryFlag from "react-native-country-flag";
 
 export default function HomeScreen() {
   const { language, setLanguage } = useLanguage();
@@ -41,18 +38,6 @@ export default function HomeScreen() {
       <ThemedText style={{ fontSize: 18, fontWeight: 600 }}>
         Ready to practice your {language}?
       </ThemedText>
-      <View className="flex flex-row">
-        {Object.entries(LanguageData).map(([key, value]) => (
-          <TouchableOpacity
-            key={key}
-            onPress={() => {
-              setLanguage(key);
-            }}
-          >
-            <CountryFlag isoCode={value.countryCode} size={30} />
-          </TouchableOpacity>
-        ))}
-      </View>
 
       <ThemedView style={styles.stepContainer}>
         {/* Gamemode List */}
@@ -78,6 +63,7 @@ const styles = StyleSheet.create({
   stepContainer: {
     gap: 8,
     marginBottom: 8,
+    marginTop: 20,
   },
   hero: {
     height: "100%",
