@@ -75,18 +75,18 @@ export function UserAvatar({ volume, isSpeaking }: UserAvatarProps) {
 
   // ── Subtle head bob while speaking ────────────────────────────────────────
   useEffect(() => {
-    if (isSpeaking) {
-      bounceAnim.current = Animated.loop(
-        Animated.sequence([
-          Animated.timing(bounceY, { toValue: -4, duration: 250, useNativeDriver: true }),
-          Animated.timing(bounceY, { toValue: 0,  duration: 250, useNativeDriver: true }),
-        ])
-      );
-      bounceAnim.current.start();
-    } else {
-      bounceAnim.current?.stop();
-      Animated.timing(bounceY, { toValue: 0, duration: 200, useNativeDriver: true }).start();
-    }
+    // if (isSpeaking) {
+    //   bounceAnim.current = Animated.loop(
+    //     Animated.sequence([
+    //       Animated.timing(bounceY, { toValue: -4, duration: 250, useNativeDriver: true }),
+    //       Animated.timing(bounceY, { toValue: 0,  duration: 250, useNativeDriver: true }),
+    //     ])
+    //   );
+    //   bounceAnim.current.start();
+    // } else {
+    //   bounceAnim.current?.stop();
+    //   Animated.timing(bounceY, { toValue: 0, duration: 200, useNativeDriver: true }).start();
+    // }
   }, [isSpeaking]);
 
   const frames = FRAMES["user"];
@@ -95,7 +95,7 @@ export function UserAvatar({ volume, isSpeaking }: UserAvatarProps) {
     <Animated.View style={[styles.wrapper, { transform: [{ translateY: bounceY }] }]}>
       <Image source={frames[frame]} style={styles.image} resizeMode="contain" />
       {/* DEBUG: Comment out the line below to disable audio debugger */}
-      <Text style={{ color: "#ffff00", fontSize: 12 }}>Audio Debugger: {Number(volume).toFixed(3)}</Text> 
+      {/* <Text style={{ color: "#ffff00", fontSize: 12 }}>Audio Debugger: {Number(volume).toFixed(3)}</Text>  */}
     </Animated.View>
   );
 }

@@ -1,6 +1,8 @@
 import { Gamemodes } from "@/utils/gamemodes";
+import { useRef } from "react";
 
-const backendURL = "http://192.168.86.22:8000";
+// const backendURL = "http://192.168.86.22:8000"; // Tony url
+const backendURL = "http://192.168.56.1:8000"; // Zak url
 
 interface RealTimeOptions {
   onTranscript?: (text: string, role: "user" | "assistant") => void;
@@ -12,13 +14,14 @@ interface RealTimeOptions {
 export const useRealTime = (options: RealTimeOptions = {}) => {
   const { onTranscript, onConnected, onDisconnected, onVolume } = options;
 
-  const pcRef       = { current: null as RTCPeerConnection | null };
-  const streamRef   = { current: null as MediaStream | null };
-  const audioElRef  = { current: null as HTMLAudioElement | null };
-  const audioCtxRef = { current: null as AudioContext | null };
-  // Separate RAF handles so assistant and user polls don't clobber each other
-  const rafAssistantRef = { current: null as number | null };
-  const rafUserRef      = { current: null as number | null };
+const pcRef           = useRef<RTCPeerConnection | null>(null);
+const streamRef       = useRef<MediaStream | null>(null);
+const audioElRef      = useRef<HTMLAudioElement | null>(null);
+const audioCtxRef     = useRef<AudioContext | null>(null);
+// Separate RAF handles so assistant and user polls don't clobber each other
+const rafAssistantRef = useRef<number | null>(null);
+const rafUserRef      = useRef<number | null>(null);
+
 
   const waitForIceGathering = (pc: RTCPeerConnection): Promise<void> => {
     return new Promise((resolve) => {
@@ -78,6 +81,25 @@ export const useRealTime = (options: RealTimeOptions = {}) => {
       },
       body: JSON.stringify({
         voice: Gamemodes[gamemodeKey].voice,
+        instructions: `
+Stay in character at all times.
+
+LANGUAGE:
+- Only speak in ${language}. Never use any other language.
+
+RESPONSE FORMAT (STRICT):
+- Exactly 2 sentences.
+- Sentence 1: a short statement.
+- Sentence 2: a simple question.
+- Do not add anything else.
+
+STYLE:
+- Use simple vocabulary (high-school level).
+- Keep sentences short and clear.
+
+CONTEXT:
+${Gamemodes[gamemodeKey].prompt}
+`
       }),
     });
     const session = await res.json();
@@ -150,8 +172,8 @@ LANGUAGE:
 
 RESPONSE FORMAT (STRICT):
 - Exactly 2 sentences.
-- Sentence 1: a simple question.
-- Sentence 2: a short statement.
+- Sentence 1: a short statement.
+- Sentence 2: a simple question.
 - Do not add anything else.
 
 STYLE:

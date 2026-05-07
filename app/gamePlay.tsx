@@ -1,7 +1,7 @@
 import { useRealTime } from "@/hooks/useRealTime";
 import { NPCCharacter } from "@/components/NPCCharacter";
 import { UserAvatar } from "@/components/UserAvatar";
-import { useLocalSearchParams } from "expo-router";
+import { Stack, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -12,6 +12,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { Gamemodes } from "@/utils/gamemodes";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -303,7 +304,7 @@ const scoreStyles = StyleSheet.create({
 
 // ── Win Screen ────────────────────────────────────────────────────────────────
 
-function WinScreen({ score, onRetry }: { score: number; onRetry: () => void }) {
+function WinScreen({ score, maxScore, onRetry }: { score: number; maxScore: number; onRetry: () => void }) {
   const scaleAnim = useRef(new Animated.Value(0.7)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -331,9 +332,8 @@ function WinScreen({ score, onRetry }: { score: number; onRetry: () => void }) {
       ]}
     >
       <Text style={winStyles.emoji}>🎉</Text>
-      <Text style={winStyles.title}>You Win!</Text>
-      <Text style={winStyles.score}>{score} pts</Text>
-      <Text style={winStyles.subtitle}>Great conversation!</Text>
+      <Text style={winStyles.subtitle}>{score} / {maxScore} pts</Text>
+      <Text style={winStyles.subtitle}>Interesting Conversation!</Text>
       <Pressable style={winStyles.button} onPress={onRetry}>
         <Text style={winStyles.buttonText}>Play Again</Text>
       </Pressable>
@@ -365,7 +365,8 @@ const winStyles = StyleSheet.create({
 
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
-const TARGET_SCORE = 15;
+const TARGET_SCORE = 100; // 5 turns × 20 pts max
+const MAX_TURNS = 5;
 
 export default function VoiceGameScreen() {
   const { gamemodeKey, language } = useLocalSearchParams();
@@ -375,6 +376,30 @@ export default function VoiceGameScreen() {
   const [transcript, setTranscript] = useState<TranscriptLine[]>([]);
   const [score, setScore] = useState(0);
   const [hasWon, setHasWon] = useState(false);
+  const [turnCount, setTurnCount] = useState(0);
+  const [totalScore, setTotalScore] = useState(0);
+  
+  const scoreResponse = async (text: string): Promise<number> => {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.EXPO_PUBLIC_OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        max_tokens: 5,
+        messages: [{
+          role: "user",
+          content: `You are a language teacher. Rate this ${language} response from 1–20 ` +
+            `based on grammar, vocabulary, and fluency. Reply with ONLY the integer number.\n\n"${text}"`,
+        }],
+      }),
+    });
+    const data = await res.json();
+    const n = parseInt(data.choices?.[0]?.message?.content?.trim(), 10);
+    return isNaN(n) ? 10 : Math.min(Math.max(n, 1), 20);
+  };
 
   // ── NPC talking state ──────────────────────────────────────────────────────
   // `npcVolume` is a 0–1 value reflecting how loud the NPC audio currently is.
@@ -385,6 +410,7 @@ export default function VoiceGameScreen() {
   const [userSpeaking, setUserSpeaking] = useState(false);
 
   const scrollRef = useRef<ScrollView>(null);
+  const turnCountRef = useRef(0);
 
   const { startSession, stopSession } = useRealTime({
     onTranscript: (text, role) => {
@@ -397,12 +423,13 @@ export default function VoiceGameScreen() {
 
       if (role === "user") {
         setMood("thinking");
-        // Award random points for now — replace with real scoring
-        const pts = Math.floor(Math.random() * 4) + 1;
-        setScore((prev) => {
-          const next = prev + pts;
-          if (next >= TARGET_SCORE) setHasWon(true);
-          return next;
+        turnCountRef.current += 1;
+        const newTurn = turnCountRef.current;
+        setTurnCount(newTurn);             // still drives the UI
+        scoreResponse(text).then((pts) => {
+          setScore((prev) => prev + pts);
+          setTotalScore((prev) => prev + pts);
+          if (newTurn >= MAX_TURNS) setHasWon(true);
         });
       } else {
         setMood("excited");
@@ -454,6 +481,8 @@ export default function VoiceGameScreen() {
 
   const handleRetry = () => {
     setScore(0);
+    setTurnCount(0);
+    setTotalScore(0);
     setHasWon(false);
     setTranscript([]);
     setMood("happy");
@@ -461,6 +490,8 @@ export default function VoiceGameScreen() {
     setNpcVolume(0);
     stopSession();
     setConnected(false);
+    turnCountRef.current = 0;
+    setTurnCount(0);
   };
 
   useEffect(() => {
@@ -478,16 +509,23 @@ export default function VoiceGameScreen() {
   if (hasWon) {
     return (
       <View style={styles.safe}>
-        <WinScreen score={score} onRetry={handleRetry} />
+        <WinScreen score={totalScore} maxScore={MAX_TURNS * 20} onRetry={handleRetry} />
       </View>
     );
   }
 
   return (
+    <>
+    <Stack.Screen
+    options={{
+      headerShown: false,
+    }}
+    />
     <View style={styles.safe}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Voice Practice</Text>
+        <Text style={styles.headerTitle}>{Gamemodes[gamemodeKey].title}</Text>
+        <Text style={styles.headerTitle}>Turn {turnCount} / {MAX_TURNS}</Text>
         <ScoreBadge score={score} target={TARGET_SCORE} />
       </View>
 
@@ -560,6 +598,7 @@ export default function VoiceGameScreen() {
         )}
       </View>
     </View>
+    </>
   );
 }
 
@@ -568,7 +607,7 @@ export default function VoiceGameScreen() {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: "#0F0F1A",
+    backgroundColor: "#ffffff",
   },
   header: {
     paddingHorizontal: 20,
