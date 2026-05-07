@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Animated, Image, StyleSheet, View } from "react-native";
+import { Animated, Image, StyleSheet } from "react-native";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -12,7 +12,6 @@ interface NPCCharacterProps {
 }
 
 // ── Frame image map ───────────────────────────────────────────────────────────
-// Requires images at e.g. assets/images/cop-0.png … cop-3.png
 
 const FRAMES: Record<GamemodeKey, [any, any, any, any]> = {
   cop:     [
@@ -42,10 +41,6 @@ const FRAMES: Record<GamemodeKey, [any, any, any, any]> = {
 };
 
 // ── Volume → frame index ──────────────────────────────────────────────────────
-// 0         → frame 0 (mouth closed)
-// 0.01–0.33 → frame 1 (slightly open)
-// 0.33–0.66 → frame 2 (medium open)
-// 0.66–1.0  → frame 3 (wide open)
 
 function volumeToFrame(volume: number, isSpeaking: boolean): 0 | 1 | 2 | 3 {
   if (!isSpeaking || volume < 0.01) return 0;
@@ -56,16 +51,21 @@ function volumeToFrame(volume: number, isSpeaking: boolean): 0 | 1 | 2 | 3 {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-const TEAL = "#1D9E75";
-
 export function NPCCharacter({ gamemode, volume, isSpeaking }: NPCCharacterProps) {
   const [frame, setFrame] = useState<0 | 1 | 2 | 3>(0);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bounceY = useRef(new Animated.Value(0)).current;
   const bounceAnim = useRef<Animated.CompositeAnimation | null>(null);
 
-  // ── Update frame from volume ───────────────────────────────────────────────
+  // ── Debounced frame update — prevents flicker from rapid volume changes ────
   useEffect(() => {
-    setFrame(volumeToFrame(volume, isSpeaking));
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setFrame(volumeToFrame(volume, isSpeaking));
+    }, 32); // ~2 frames at 60 fps
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
   }, [volume, isSpeaking]);
 
   // ── Subtle head bob while speaking ────────────────────────────────────────
@@ -87,24 +87,41 @@ export function NPCCharacter({ gamemode, volume, isSpeaking }: NPCCharacterProps
   const frames = FRAMES[gamemode];
 
   return (
+    // Fixed-size wrapper so absolutely-positioned frames have a container
     <Animated.View style={[styles.wrapper, { transform: [{ translateY: bounceY }] }]}>
-      <Image source={frames[frame]} style={styles.image} resizeMode="contain" />
+      {frames.map((src, i) => (
+        <Image
+          key={i}
+          source={src}
+          style={[
+            styles.image,
+            styles.stacked,
+            // Show only the active frame — no source swap, no reload, no flash
+            { opacity: frame === i ? 1 : 0 },
+          ]}
+          resizeMode="contain"
+        />
+      ))}
     </Animated.View>
   );
 }
-
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   wrapper: {
+    width: 120,
+    height: 120,
     alignItems: "center",
-    gap: 6,
   },
   image: {
     width: 120,
     height: 120,
     borderRadius: 999,
   },
-
+  stacked: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+  },
 });

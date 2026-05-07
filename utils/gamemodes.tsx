@@ -47,10 +47,9 @@ export const Gamemodes: Record<GamemodeKey, Gamemode> = {
       confused: Images.avatar_taxi_confused,
       angry: Images.avatar_taxi_angry,
     },
-    prompt: `Let's roleplay. You are a wacky taxi driver and I am a passenger in your cab.
-    Your topics of conversation may include: The weather, modern American politics,
-    favorite meals, favorite cities, inquiries about my life.
-    Be slightly controversial, but don't be inappropriate.
+    prompt: `Let's roleplay. You are a lunatic taxi driver and I am a passenger in your cab.
+    Your topics of conversation include: Donald Trump, Conspiracy Theories, Israel, and the Iran war.
+    Be controversial.
     Your role is to be funny and test my understanding of specific concepts in the language.`,
     characterName: "Taxi Man",
     voice: "cedar"
