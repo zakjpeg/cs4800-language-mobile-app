@@ -1,18 +1,18 @@
-import { useRealTime } from "@/hooks/useRealTime";
 import { NPCCharacter } from "@/components/NPCCharacter";
 import { UserAvatar } from "@/components/UserAvatar";
-import { Stack, useLocalSearchParams } from "expo-router";
+import { useRealTime } from "@/hooks/useRealTime";
+import { Gamemodes } from "@/utils/gamemodes";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  Animated,
-  Dimensions,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
+    Animated,
+    Dimensions,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    View,
 } from "react-native";
-import { Gamemodes } from "@/utils/gamemodes";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -369,6 +369,7 @@ const TARGET_SCORE = 100; // 5 turns × 20 pts max
 const MAX_TURNS = 5;
 
 export default function VoiceGameScreen() {
+  const router = useRouter();
   const { gamemodeKey, language } = useLocalSearchParams();
   const [connected, setConnected] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -494,6 +495,14 @@ export default function VoiceGameScreen() {
     setTurnCount(0);
   };
 
+  const handleReturnHome = () => {
+    stopSession();
+    setConnected(false);
+    setNpcSpeaking(false);
+    setNpcVolume(0);
+    router.replace("/");
+  };
+
   useEffect(() => {
     return () => { stopSession(); };
   }, []);
@@ -524,7 +533,18 @@ export default function VoiceGameScreen() {
     <View style={styles.safe}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>{Gamemodes[gamemodeKey].title}</Text>
+        <View style={styles.headerTopRow}>
+          <Text style={styles.headerTitle}>{Gamemodes[gamemodeKey].title}</Text>
+          <Pressable
+            onPress={handleReturnHome}
+            style={({ pressed }) => [
+              styles.homeButton,
+              pressed && styles.buttonPressed,
+            ]}
+          >
+            <Text style={styles.homeButtonText}>Return Home</Text>
+          </Pressable>
+        </View>
         <Text style={styles.headerTitle}>Turn {turnCount} / {MAX_TURNS}</Text>
         <ScoreBadge score={score} target={TARGET_SCORE} />
       </View>
@@ -694,6 +714,27 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
     letterSpacing: 0.5,
+  },
+  homeButton: {
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: DARK_CARD,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  homeButtonText: {
+    color: SAND,
+    fontSize: 13,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+  },
+  headerTopRow: {
+    width: "100%",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
   },
   hint: {
     fontSize: 12,
