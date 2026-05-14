@@ -1,0 +1,105 @@
+graph TB
+    %% Define Actors
+    IL[👤 Individual Learner]
+    CA[👔 Corporate Administrator]
+    EL[💼 Enterprise Learner]
+    AI[🤖 AI Conversation Engine]
+    LC[👨‍🏫 Language Coach]
+    EI[🎓 Educational Institution]
+    EP[🏢 Employer Partner]
+    PG[💳 Payment Gateway]
+    SA[⚙️ System Administrator]
+
+    %% Core System
+    subgraph LinguaFlow["🌐 LinguaFlow Platform"]
+        
+        subgraph CoreLearning["Core Learning"]
+            UC1[Register & Create Profile]
+            UC2[Engage in AI Conversation]
+            UC3[Complete Adaptive Lessons]
+            UC4[Track Progress]
+            UC5[Earn Achievements]
+        end
+        
+        subgraph Subscription["Subscription & Monetization"]
+            UC6[Manage Subscription]
+            UC7[Refer Friends]
+            UC8[Purchase Premium Content]
+            UC9[Book Live Coaching]
+        end
+        
+        subgraph Community["Community & Exchange"]
+            UC10[Language Exchange]
+            UC11[Community Forums]
+        end
+        
+        subgraph Credentials["Credentials & Verification"]
+            UC12[Earn Credentials]
+            UC13[Verify Credentials]
+            UC14[Share with Employers]
+        end
+        
+        subgraph Corporate["Corporate Management"]
+            UC15[Setup Corporate Account]
+            UC16[Manage Employees]
+            UC17[Configure Programs]
+            UC18[Generate Reports]
+        end
+        
+        subgraph AdminOps["Platform Operations"]
+            UC19[Monitor Performance]
+            UC20[Manage Content]
+            UC21[Moderate Community]
+            UC22[Configure AI Models]
+        end
+    end
+
+    %% Individual Learner Connections
+    IL --> UC1
+    IL --> UC2
+    IL --> UC3
+    IL --> UC4
+    IL --> UC5
+    IL --> UC6
+    IL --> UC7
+    IL --> UC8
+    IL --> UC9
+    IL --> UC10
+    IL --> UC11
+    IL --> UC12
+    IL --> UC14
+
+    %% Corporate Administrator Connections
+    CA --> UC15
+    CA --> UC16
+    CA --> UC17
+    CA --> UC18
+
+    %% Enterprise Learner Connections
+    EL --> UC3
+    EL --> UC4
+    EL --> UC12
+    EL --> UC14
+
+    %% Secondary Actor Connections
+    UC2 -.uses.-> AI
+    UC3 -.uses.-> AI
+    UC9 -.connects.-> LC
+    UC13 -.verifies.-> EI
+    UC14 -.shares with.-> EP
+    UC6 -.processes.-> PG
+    UC8 -.processes.-> PG
+
+    %% System Admin Connections
+    SA --> UC19
+    SA --> UC20
+    SA --> UC21
+    SA --> UC22
+
+    %% Styling
+    classDef actorStyle fill:#e1f5ff,stroke:#0288d1,stroke-width:2px
+    classDef systemStyle fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef usecaseStyle fill:#fff9c4,stroke:#f57f17,stroke-width:1px
+    
+    class IL,CA,EL,AI,LC,EI,EP,PG,SA actorStyle
+    class UC1,UC2,UC3,UC4,UC5,UC6,UC7,UC8,UC9,UC10,UC11,UC12,UC13,UC14,UC15,UC16,UC17,UC18,UC19,UC20,UC21,UC22 usecaseStyle
