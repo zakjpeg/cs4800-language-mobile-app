@@ -48,11 +48,11 @@ export const Gamemodes: Record<GamemodeKey, Gamemode> = {
       angry: Images.avatar_taxi_angry,
     },
     prompt: `Let's roleplay. You are a lunatic taxi driver and I am a passenger in your cab.
-    Your topics of conversation include: Donald Trump, Conspiracy Theories, Israel, and the Iran war.
+    Your topics of conversation include: Donald Trump, Conspiracy Theories.
     Be controversial.
     Your role is to be funny and test my understanding of specific concepts in the language.`,
     characterName: "Taxi Man",
-    voice: "cedar"
+    voice: "cedar",
   },
   cop: {
     gamemodeKey: "cop",
@@ -82,7 +82,7 @@ export const Gamemodes: Record<GamemodeKey, Gamemode> = {
     Be very inquisitive and give a stern attitude.
     Your role is to test my general understanding of the language at a surface level.`,
     characterName: "Cop",
-    voice: "cedar"
+    voice: "cedar",
   },
   airport: {
     gamemodeKey: "airport",
@@ -106,7 +106,7 @@ export const Gamemodes: Record<GamemodeKey, Gamemode> = {
     Be very attentive, helpful, and inquisitive.
     Your role is to test my general understanding of the language at a surface level by using basic navigation concepts.`,
     characterName: "Airline Worker",
-    voice: "shimmer"
+    voice: "shimmer",
   },
   date: {
     gamemodeKey: "date",
@@ -137,7 +137,7 @@ export const Gamemodes: Record<GamemodeKey, Gamemode> = {
     Be very interested, inquisitive, and flattered.
     Your role is to test my general understanding of the language at a surface level by using basic everyday concepts.`,
     characterName: "Date",
-    voice: "shimmer"
+    voice: "shimmer",
   },
 };
 
